@@ -11,7 +11,7 @@
  */
 
 import { randInt, pickOne, shuffle } from './utils.js';
-import { recordFactAttempt, getTrickyFacts } from '../storage.js';
+import { recordFactAttempt, getTrickyFacts, getRecentPuzzleSigs, recordRecentPuzzleSigs } from '../storage.js';
 
 export const meta = {
   id: 'fact-studio',
@@ -162,21 +162,23 @@ function buildWarmupPool(tier) {
 
 function selectWarmupItems(tier, profile) {
   const pool = buildWarmupPool(tier);
-  const scopeKey = `${profile?.id || 'anon'}:${tier}`;
-  const recent = getRecentSet(recentWarmupMap, scopeKey);
+  const scopeKey = `fact-warmup:${tier}`;
+  const recentList = getRecentPuzzleSigs(profile, scopeKey);
+  const recentSet = new Set(recentList);
 
-  let candidates = pool.filter((item) => !recent.has(item.factKey));
+  let candidates = pool.filter((item) => !recentSet.has(item.factKey));
   if (candidates.length < 3) {
-    recent.clear();
+    recentList.length = 0;
     candidates = pool;
   }
 
   const chosen = shuffle(candidates).slice(0, 3);
-  chosen.forEach((c) => recent.add(c.factKey));
-  if (recent.size > Math.max(9, pool.length - 4)) {
-    recent.clear();
-    chosen.forEach((c) => recent.add(c.factKey));
-  }
+  recordRecentPuzzleSigs(
+    profile,
+    scopeKey,
+    chosen.map((c) => c.factKey),
+    Math.min(18, Math.max(9, pool.length - 4))
+  );
 
   return chosen.map((p) => ({ ...p, phase: 'warmup' }));
 }

@@ -7,6 +7,7 @@
  */
 
 import { randInt, shuffle, makeNumericChoices } from './utils.js';
+import { getRecentPuzzleSigs, recordRecentPuzzleSigs } from '../storage.js';
 
 export const meta = {
   id: 'cube-architect',
@@ -202,13 +203,36 @@ function layerCounts(grid) {
   return counts;
 }
 
-export function generateSession(tier = 1) {
+export function generateSession(tier = 1, profile = null) {
+  const scopeKey = `cube-architect:${tier}`;
+  const recentSigs = getRecentPuzzleSigs(profile, scopeKey);
+  const sessionSigs = new Set();
   const rounds = [];
   const totalRounds = 5;
 
+  const gridSig = (g) => g.map((r) => r.join('')).join('/');
+
   for (let i = 0; i < totalRounds; i++) {
     const isTopView = tier >= 3 && (i === 2 || i === 4);
-    const struct = generateStructure(tier);
+    let struct = null;
+    let fallback = null;
+    for (let a = 0; a < 20; a++) {
+      const cand = generateStructure(tier);
+      const sig = `${isTopView ? 'tv' : 'cnt'}:${gridSig(cand.grid)}`;
+      if (!sessionSigs.has(sig)) {
+        fallback = { cand, sig };
+        if (!recentSigs.includes(sig)) {
+          struct = cand;
+          sessionSigs.add(sig);
+          break;
+        }
+      }
+    }
+    if (!struct) {
+      struct = fallback ? fallback.cand : generateStructure(tier);
+      if (fallback) sessionSigs.add(fallback.sig);
+    }
+
     const layers = layerCounts(struct.grid);
 
     if (isTopView) {
@@ -244,6 +268,7 @@ export function generateSession(tier = 1) {
       });
     }
   }
+  recordRecentPuzzleSigs(profile, scopeKey, Array.from(sessionSigs), 28);
   return rounds;
 }
 

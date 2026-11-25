@@ -78,21 +78,30 @@ for (const game of GAMES) {
               assert.equal(r.expectedRight.length, r.rows);
               for (let row = 0; row < r.rows; row++) {
                 for (let col = 0; col < r.cols; col++) {
-                  assert.equal(r.expectedRight[row][col], r.leftGrid[row][r.cols - 1 - col]);
+                  if (r.axis === 'horizontal') {
+                    assert.equal(r.expectedRight[row][col], r.leftGrid[r.rows - 1 - row][col]);
+                  } else if (r.axis === 'diagonal') {
+                    if (row > col) assert.equal(r.expectedRight[row][col], r.leftGrid[col][row]);
+                  } else {
+                    assert.equal(r.expectedRight[row][col], r.leftGrid[row][r.cols - 1 - col]);
+                  }
                 }
               }
             } else if (r.kind === 'rotate') {
-              // Verify chiral guarantee: if impostor, no rotation matches target; if not impostor, at least 1 rotation matches target
+              assert.notEqual(cellsSignature(r.startCells), r.targetSig, 'Start shape must not already match target');
               let cur = r.startCells;
-              let matched = false;
+              const matches = [];
               for (let t = 0; t < 4; t++) {
-                if (cellsSignature(cur) === r.targetSig) matched = true;
+                if (cellsSignature(cur) === r.targetSig) matches.push(t);
                 cur = rotateCells90CW(cur);
               }
               if (r.isFlippedImpostor) {
-                assert.equal(matched, false, 'Flipped impostor must NEVER match via rotation!');
+                assert.equal(matches.length, 0, 'Flipped impostor must NEVER match via rotation!');
               } else {
-                assert.equal(matched, true, 'Valid rotated shape MUST match target via 90-deg turns!');
+                assert.ok(matches.includes(r.turnsNeededCW), `Expected CW match at ${r.turnsNeededCW}, got ${matches}`);
+                if (r.predictFirst) {
+                  assert.equal(matches.length, 1, `Predict-first must have 1 unambiguous rotation match, got ${matches}`);
+                }
               }
             }
           }
@@ -147,9 +156,13 @@ for (const game of GAMES) {
             if (r.kind === 'sort-switch' || r.kind === 'sort-bool') {
               assert.equal(r.cards.length, 4);
               assert.ok(r.cards.some((c) => c.switched), 'Must switch rule mid-round');
-            } else if (r.kind === 'pattern-number') {
+            } else if (r.kind === 'pattern-number' || r.kind === 'function-machine') {
               assert.ok(r.choices.includes(r.answer));
               assert.equal(new Set(r.choices).size, 4);
+              if (r.kind === 'function-machine') {
+                assert.equal(r.examples.length, 3);
+                assert.ok(typeof r.ruleLabel === 'string' && r.ruleLabel.length > 0);
+              }
             } else {
               assert.equal(r.options.length, 4);
               assert.ok(r.correctIdx >= 0 && r.correctIdx < 4);

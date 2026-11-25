@@ -8,6 +8,7 @@
  */
 
 import { randInt, pickOne, shuffle, makeNumericChoices } from './utils.js';
+import { getRecentPuzzleSigs, recordRecentPuzzleSigs } from '../storage.js';
 
 export const meta = {
   id: 'balance-lab',
@@ -144,22 +145,6 @@ function renderScaleSvg(scale) {
 }
 
 const ALL_KINDS = ['star', 'gem', 'berry', 'leaf'];
-const recentBalanceMap = new Map();
-
-function getRecentSigs(scopeKey) {
-  if (!recentBalanceMap.has(scopeKey)) recentBalanceMap.set(scopeKey, []);
-  return recentBalanceMap.get(scopeKey);
-}
-
-function recordRecentSigs(scopeKey, sigs) {
-  const list = getRecentSigs(scopeKey);
-  for (const s of sigs) {
-    if (!list.includes(s)) list.push(s);
-  }
-  if (list.length > 30) {
-    list.splice(0, list.length - 30);
-  }
-}
 
 function makeCompareRound(tier) {
   const kinds = shuffle(ALL_KINDS).slice(0, 3);
@@ -297,10 +282,20 @@ function makeVisualAlgebraRound(tier = 3, preferredKind = null) {
   const left = flip ? numPan : shapePan;
   const right = flip ? shapePan : numPan;
 
+  const simpShapePan = Array.from({ length: count }, () => ({ type: 'shape', kind: shapeKind }));
+  const simpNumPan = [{ type: 'num', value: rightTotal - extra }];
+  const cancelSteps = [
+    {
+      label: `✂ Take ${extra} off BOTH pans`,
+      nextScale: { left: flip ? simpNumPan : simpShapePan, right: flip ? simpShapePan : simpNumPan, tilt: 0 },
+    },
+  ];
+
   return {
     kind: 'numeric',
     signature: `alg:${count}:${xVal}:${extra}`,
     scales: [{ left, right, tilt: 0 }],
+    cancelSteps,
     choices: makeNumericChoices(xVal, 4, 1, 4),
     answer: xVal,
     prompt: `The scale is balanced! How much does 1 ${info.short} weigh?`,
@@ -313,8 +308,6 @@ function makeCancelBothSidesRound(tier = 3, preferredKind = null) {
   const shapeKind = preferredKind || pickOne(ALL_KINDS);
   const info = WEIGHT_ITEMS[shapeKind];
   const extraShapes = tier >= 4 ? pickOne([1, 2]) : Math.random() < 0.7 ? 1 : 2;
-  // Left side has (1 + extraShapes) shapes + smallNum; right side has 1 shape + bigNum
-  // Max items per pan = 1 + extraShapes + 1 <= 4
   const xVal = tier >= 4 ? randInt(4, 12) : randInt(3, 10);
   const smallNum = extraShapes === 2 && tier === 3 ? 0 : randInt(1, tier >= 4 ? 10 : 7);
   const bigNum = smallNum + extraShapes * xVal;
@@ -329,6 +322,27 @@ function makeCancelBothSidesRound(tier = 3, preferredKind = null) {
   const left = flip ? sideB : sideA;
   const right = flip ? sideA : sideB;
 
+  // Interactive step-by-step pan simplification!
+  const step1A = [
+    ...Array.from({ length: extraShapes }, () => ({ type: 'shape', kind: shapeKind })),
+    ...(smallNum > 0 ? [{ type: 'num', value: smallNum }] : []),
+  ];
+  const step1B = [{ type: 'num', value: bigNum }];
+  const cancelSteps = [
+    {
+      label: `✂ Take 1 ${info.short} off BOTH pans`,
+      nextScale: { left: flip ? step1B : step1A, right: flip ? step1A : step1B, tilt: 0 },
+    },
+  ];
+  if (smallNum > 0) {
+    const step2A = Array.from({ length: extraShapes }, () => ({ type: 'shape', kind: shapeKind }));
+    const step2B = [{ type: 'num', value: bigNum - smallNum }];
+    cancelSteps.push({
+      label: `✂ Take ${smallNum} off BOTH pans`,
+      nextScale: { left: flip ? step2B : step2A, right: flip ? step2A : step2B, tilt: 0 },
+    });
+  }
+
   const numStep = smallNum > 0 ? ` and take ${smallNum} off BOTH sides` : '';
   const finalStep =
     extraShapes === 1
@@ -339,6 +353,7 @@ function makeCancelBothSidesRound(tier = 3, preferredKind = null) {
     kind: 'numeric',
     signature: `cancel:${extraShapes}:${xVal}:${smallNum}`,
     scales: [{ left, right, tilt: 0 }],
+    cancelSteps,
     choices: makeNumericChoices(xVal, 4, 1, 4),
     answer: xVal,
     prompt: `The scale is balanced! How much does 1 ${info.short} weigh?`,
@@ -410,8 +425,8 @@ function generateUniqueRound(makerFn, sessionSigs, recentSigs) {
 }
 
 export function generateSession(tier = 1, profile = null) {
-  const scopeKey = `${profile?.id || 'anon'}:${tier}`;
-  const recentSigs = getRecentSigs(scopeKey);
+  const scopeKey = `balance-lab:${tier}`;
+  const recentSigs = getRecentPuzzleSigs(profile, scopeKey);
   const sessionSigs = new Set();
   const shapeOrder = shuffle(ALL_KINDS);
   let shapeCursor = 0;
@@ -455,7 +470,7 @@ export function generateSession(tier = 1, profile = null) {
     return r;
   });
 
-  recordRecentSigs(scopeKey, Array.from(sessionSigs));
+  recordRecentPuzzleSigs(profile, scopeKey, Array.from(sessionSigs), 30);
   return rounds;
 }
 
@@ -473,6 +488,57 @@ export function renderRound(container, round, callbacks) {
     wrap.appendChild(card);
     return card;
   });
+
+  // Optional tactile "Simplify Both Pans" interactive toolbar for algebra rounds
+  if (round.cancelSteps && round.cancelSteps.length > 0 && scaleCards[0]) {
+    let stepIdx = 0;
+    const simpBar = document.createElement('div');
+    simpBar.className = 'balance-simplify-bar';
+
+    const simpBtn = document.createElement('button');
+    simpBtn.type = 'button';
+    simpBtn.className = 'btn btn-secondary';
+    simpBtn.style.minHeight = '42px';
+    simpBtn.style.fontSize = '0.9rem';
+    simpBtn.textContent = round.cancelSteps[0].label;
+
+    const resetBtn = document.createElement('button');
+    resetBtn.type = 'button';
+    resetBtn.className = 'btn btn-ghost';
+    resetBtn.style.minHeight = '42px';
+    resetBtn.style.fontSize = '0.84rem';
+    resetBtn.textContent = 'Reset Scale';
+    resetBtn.hidden = true;
+
+    simpBtn.addEventListener('click', () => {
+      if (solved || stepIdx >= round.cancelSteps.length) return;
+      callbacks.playClick();
+      const step = round.cancelSteps[stepIdx];
+      scaleCards[0].innerHTML = renderScaleSvg(step.nextScale);
+      stepIdx += 1;
+      resetBtn.hidden = false;
+      if (stepIdx < round.cancelSteps.length) {
+        simpBtn.textContent = round.cancelSteps[stepIdx].label;
+      } else {
+        simpBtn.textContent = '✓ Simplified! Still Balanced (=)';
+        simpBtn.disabled = true;
+      }
+    });
+
+    resetBtn.addEventListener('click', () => {
+      if (solved) return;
+      callbacks.playClick();
+      stepIdx = 0;
+      scaleCards[0].innerHTML = renderScaleSvg(round.scales[0]);
+      simpBtn.textContent = round.cancelSteps[0].label;
+      simpBtn.disabled = false;
+      resetBtn.hidden = true;
+    });
+
+    simpBar.appendChild(simpBtn);
+    simpBar.appendChild(resetBtn);
+    wrap.appendChild(simpBar);
+  }
 
   const gridEl = document.createElement('div');
   gridEl.className = round.kind === 'compare' ? 'choice-grid cols-3' : 'choice-grid cols-4';

@@ -55,7 +55,10 @@ function createProfile({ id, name, avatar, tier, readAloud = false, calmMode = f
     completedDates: [], // ['YYYY-MM-DD', ...] forgiving sticker calendar
     dailyProgress: {}, // { 'YYYY-MM-DD': { doneGameIds: [], completed: false } }
     gameStats: {}, // { gameId: { plays, bestScore, totalCorrect, totalAttempts, lastNote } }
+    gameMastery: {}, // { gameId: { stage: 1..3, cleanPlays: 0, recentAccuracies: [] } }
     factHistory: {}, // { '7x6': { box, attempts, misses, lastMs, avgMs, lastSeenDay } }
+    wordHistory: {}, // { 'wb:t3:telescope': { box, attempts, misses, dueDay, lastSeenDay, lastSeenAt } }
+    recentPuzzles: {}, // { 'balance-lab:3': ['alg:2:5:3', ...] } persisted rolling freshness buffer
     unlockedBadges: [], // non-punitive competence badges
   };
 }
@@ -120,7 +123,10 @@ export function loadState() {
       completedDates: [],
       dailyProgress: {},
       gameStats: {},
+      gameMastery: {},
       factHistory: {},
+      wordHistory: {},
+      recentPuzzles: {},
       unlockedBadges: [],
       ...p,
     }));
@@ -318,6 +324,147 @@ export function getTrickyFacts(profile, limit = 8) {
     })
     .slice(0, limit)
     .map(([key, rec]) => ({ key, ...rec }));
+}
+
+export function addDaysToKey(dateKey, deltaDays) {
+  const [y, m, d] = dateKey.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + deltaDays));
+  const yy = dt.getUTCFullYear();
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(dt.getUTCDate()).padStart(2, '0');
+  return `${yy}-${mm}-${dd}`;
+}
+
+/**
+ * Spaced-retrieval mastery scheduler for WordCraft & Story items.
+ * - Clean first try -> Box 3 (due in +7 days so fresh vocabulary comes first!)
+ * - Missed -> Box 1 (due in +1 day; resurfaces gently next session/day)
+ * - Clean after miss -> climbs Box 1 -> 2 (+3d) -> 3 (+7d) -> 4 (+14d) -> 5 (+30d)
+ */
+const WORD_INTERVAL_DAYS = { 1: 1, 2: 3, 3: 7, 4: 14, 5: 30 };
+
+export function recordWordAttempt(profile, wordKey, isCleanCorrect, todayKey = getTodayKey()) {
+  if (!profile || !wordKey) return;
+  if (!profile.wordHistory) profile.wordHistory = {};
+  const existing = profile.wordHistory[wordKey];
+
+  let nextBox;
+  let attempts;
+  let misses;
+  if (!existing) {
+    nextBox = isCleanCorrect ? 3 : 1;
+    attempts = 1;
+    misses = isCleanCorrect ? 0 : 1;
+  } else {
+    attempts = (existing.attempts || 0) + 1;
+    misses = (existing.misses || 0) + (isCleanCorrect ? 0 : 1);
+    nextBox = isCleanCorrect ? Math.min(5, (existing.box || 1) + 1) : 1;
+  }
+
+  profile.wordHistory[wordKey] = {
+    box: nextBox,
+    attempts,
+    misses,
+    dueDay: addDaysToKey(todayKey, WORD_INTERVAL_DAYS[nextBox] || 7),
+    lastSeenDay: todayKey,
+    lastSeenAt: Date.now(),
+  };
+}
+
+/**
+ * Selects `count` unique items prioritizing:
+ * 1. Up to 2 overdue review items (missed/dueDay <= todayKey, not seen in this exact turn)
+ * 2. Brand-new unseen items (shuffled)
+ * 3. Remaining due / oldest-seen items so back-to-back replays never repeat recent cards
+ */
+export function selectSpacedWords(bank, profile, count, keyFn, todayKey = getTodayKey()) {
+  const history = (profile && profile.wordHistory) || {};
+  const shuffleLocal = (arr) => {
+    const c = [...arr];
+    for (let i = c.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [c[i], c[j]] = [c[j], c[i]];
+    }
+    return c;
+  };
+
+  const overdueMissed = [];
+  const unseen = [];
+  const dueReview = [];
+  const futureMastered = [];
+
+  for (const item of bank) {
+    const k = keyFn(item);
+    const rec = history[k];
+    if (!rec) {
+      unseen.push(item);
+    } else if (rec.box <= 1 && rec.dueDay <= todayKey) {
+      overdueMissed.push({ item, rec });
+    } else if (rec.dueDay <= todayKey) {
+      dueReview.push({ item, rec });
+    } else {
+      futureMastered.push({ item, rec });
+    }
+  }
+
+  overdueMissed.sort((a, b) => (a.rec.lastSeenAt || 0) - (b.rec.lastSeenAt || 0));
+  dueReview.sort((a, b) => (a.rec.lastSeenAt || 0) - (b.rec.lastSeenAt || 0));
+  futureMastered.sort((a, b) => (a.rec.lastSeenAt || 0) - (b.rec.lastSeenAt || 0));
+
+  const picked = [];
+  const used = new Set();
+  const addItem = (it) => {
+    const k = keyFn(it);
+    if (!used.has(k) && picked.length < count) {
+      used.add(k);
+      picked.push(it);
+    }
+  };
+
+  // Up to 2 missed/due items first for true spaced retrieval
+  overdueMissed.slice(0, 2).forEach((x) => addItem(x.item));
+  // Fill mostly with brand-new unseen items
+  shuffleLocal(unseen).forEach(addItem);
+  // Then other due items
+  dueReview.forEach((x) => addItem(x.item));
+  // Then any remaining missed items
+  overdueMissed.slice(2).forEach((x) => addItem(x.item));
+  // Finally oldest mastered items (least recently seen first)
+  futureMastered.forEach((x) => addItem(x.item));
+
+  return shuffleLocal(picked);
+}
+
+// Persistent cross-reload rolling freshness cache per profile + game:tier scope
+const anonRecentMap = new Map();
+
+export function getRecentPuzzleSigs(profile, scopeKey) {
+  if (profile) {
+    if (!profile.recentPuzzles) profile.recentPuzzles = {};
+    if (!Array.isArray(profile.recentPuzzles[scopeKey])) {
+      profile.recentPuzzles[scopeKey] = [];
+    }
+    return profile.recentPuzzles[scopeKey];
+  }
+  if (!anonRecentMap.has(scopeKey)) anonRecentMap.set(scopeKey, []);
+  return anonRecentMap.get(scopeKey);
+}
+
+export function recordRecentPuzzleSigs(profile, scopeKey, sigs, maxLen = 30) {
+  const list = getRecentPuzzleSigs(profile, scopeKey);
+  for (const s of sigs) {
+    const idx = list.indexOf(s);
+    if (idx !== -1) list.splice(idx, 1);
+    list.push(s);
+  }
+  if (list.length > maxLen) {
+    list.splice(0, list.length - maxLen);
+  }
+}
+
+export function getGameStage(profile, gameId) {
+  const m = profile && profile.gameMastery && profile.gameMastery[gameId];
+  return Math.max(1, Math.min(3, Number((m && m.stage) || 1)));
 }
 
 export function exportStateJson(state) {

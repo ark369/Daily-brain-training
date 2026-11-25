@@ -1,307 +1,329 @@
 /**
- * Word Connections (WordCraft Pillar — Categories, Opposites, Shades of Meaning & Analogies)
- * - Distinct action headers (zero title/card text duplication!).
- * - Intuitive 2-row Visual Analogy Bridge cards ([Author] -> [Book] / just like / [Composer] -> [?])
- *   instead of cryptic ":" vs "::" notation.
+ * Word Connections (WordCraft Pillar — Opposites, Categories, Visual Analogies,
+ * Shades of Meaning Ladders, Homophones, Idioms & Precision Vocabulary)
+ * - 44–46 curated items per tier (~180 total) wired to persistent spaced-retrieval mastery!
+ * - Intuitive 2-row Visual Analogy Bridges (never cryptic ":" vs "::" notation).
  */
 
-import { pickMany, shuffle } from './utils.js';
+import { shuffle } from './utils.js';
+import { selectSpacedWords, recordWordAttempt, getRecentPuzzleSigs, recordRecentPuzzleSigs } from '../storage.js';
 
 export const meta = {
   id: 'word-connections',
   title: 'Word Connections',
   pillar: 'wordcraft',
   pillarLabel: 'WordCraft',
-  shortDesc: 'Spot categories, opposites, word pairs, and order words by shades of meaning.',
-  scienceNote: 'Semantic networks & verbal analogies deepen vocabulary and reading comprehension.',
+  shortDesc: 'Spot categories, opposites, word pairs, idioms, and shades of meaning.',
+  scienceNote: 'Semantic networks & spaced verbal analogies deepen vocabulary and reading comprehension.',
   timed: false,
 };
 
+// Compact builders keep 180 items readable & strictly consistent
+const mOpp = (id, targetWord, answer, distractors, tip) => ({
+  id,
+  kind: 'choice',
+  subkind: 'opposite',
+  badge: 'Opposites',
+  prompt: 'Find the opposite word!',
+  targetWord,
+  options: [answer, ...distractors],
+  answer,
+  tip,
+});
+
+const mSyn = (id, targetWord, answer, distractors, tip) => ({
+  id,
+  kind: 'choice',
+  subkind: 'synonym',
+  badge: 'Same Meaning',
+  prompt: 'Find the word with almost the same meaning!',
+  targetWord,
+  options: [answer, ...distractors],
+  answer,
+  tip,
+});
+
+const mOdd = (id, answer, groupItems, tip) => ({
+  id,
+  kind: 'choice',
+  subkind: 'odd',
+  badge: 'Odd One Out',
+  prompt: 'Spot the one that does NOT belong!',
+  cardHint: '3 belong together · 1 does not',
+  options: [answer, ...groupItems],
+  answer,
+  tip,
+});
+
+const mAnalogy = (id, a1, a2, b1, answer, distractors, tip) => ({
+  id,
+  kind: 'choice',
+  subkind: 'analogy',
+  badge: 'Word Pair',
+  prompt: 'Complete the matching word pair!',
+  pairA: [a1, a2],
+  pairBLeft: b1,
+  options: [answer, ...distractors],
+  answer,
+  tip,
+});
+
+const mLadder = (id, directionLabel, ordered, labels, tip) => ({
+  id,
+  kind: 'ladder',
+  badge: 'Shades of Meaning',
+  prompt: 'Arrange the words in order!',
+  directionLabel,
+  ordered,
+  labels,
+  tip,
+});
+
+const mSent = (id, badge, sentenceBefore, sentenceAfter, answer, distractors, tip) => ({
+  id,
+  kind: 'choice',
+  subkind: 'sentence',
+  badge,
+  prompt: 'Choose the word that fits best!',
+  sentenceBefore,
+  sentenceAfter,
+  options: [answer, ...distractors],
+  answer,
+  tip,
+});
+
+const mDef = (id, badge, prompt, definition, answer, distractors, tip) => ({
+  id,
+  kind: 'choice',
+  subkind: 'definition',
+  badge,
+  prompt,
+  definition,
+  options: [answer, ...distractors],
+  answer,
+  tip,
+});
+
+// Tier 1 (Sprout, Ages 5–6): 44 items — Opposites (18), Odd One Out (16), Simple Word Pairs (10)
 const TIER1_ITEMS = [
-  {
-    kind: 'choice',
-    subkind: 'opposite',
-    badge: 'Opposites',
-    prompt: 'Find the opposite word!',
-    targetWord: 'HOT',
-    options: ['Cold', 'Warm', 'Sunny', 'Red'],
-    answer: 'Cold',
-    tip: 'Hot like cocoa — the opposite is chilly like ice cream!',
-  },
-  {
-    kind: 'choice',
-    subkind: 'opposite',
-    badge: 'Opposites',
-    prompt: 'Find the opposite word!',
-    targetWord: 'FAST',
-    options: ['Slow', 'Quick', 'Tall', 'Loud'],
-    answer: 'Slow',
-    tip: 'A cheetah is fast — a turtle is the opposite!',
-  },
-  {
-    kind: 'choice',
-    subkind: 'opposite',
-    badge: 'Opposites',
-    prompt: 'Find the opposite word!',
-    targetWord: 'DAY',
-    options: ['Night', 'Morning', 'Cloud', 'Play'],
-    answer: 'Night',
-    tip: 'The sun shines in the day; stars shine at ___!',
-  },
-  {
-    kind: 'choice',
-    subkind: 'opposite',
-    badge: 'Opposites',
-    prompt: 'Find the opposite word!',
-    targetWord: 'FULL',
-    options: ['Empty', 'Heavy', 'Big', 'Open'],
-    answer: 'Empty',
-    tip: 'When you finish your cup of juice, it is no longer full — it is ___!',
-  },
-  {
-    kind: 'choice',
-    subkind: 'odd',
-    badge: 'Odd One Out',
-    prompt: 'Spot the one that does NOT belong!',
-    cardHint: '3 belong together · 1 does not',
-    options: ['School Bus', 'Apple', 'Banana', 'Strawberry'],
-    answer: 'School Bus',
-    tip: 'Three of these are fruits you can eat — one is a vehicle!',
-  },
-  {
-    kind: 'choice',
-    subkind: 'odd',
-    badge: 'Odd One Out',
-    prompt: 'Spot the one that does NOT belong!',
-    cardHint: '3 belong together · 1 does not',
-    options: ['Pillow', 'Lion', 'Elephant', 'Giraffe'],
-    answer: 'Pillow',
-    tip: 'Three of these are animals — one goes on your bed!',
-  },
-  {
-    kind: 'choice',
-    subkind: 'odd',
-    badge: 'Odd One Out',
-    prompt: 'Spot the one that does NOT belong!',
-    cardHint: '3 belong together · 1 does not',
-    options: ['Snowman', 'Fork', 'Spoon', 'Plate'],
-    answer: 'Snowman',
-    tip: 'Three of these belong on a dinner table!',
-  },
+  // Opposites (18)
+  mOpp('wc1-hot', 'HOT', 'Cold', ['Warm', 'Sunny', 'Red'], 'Hot like cocoa — the opposite is chilly like ice cream!'),
+  mOpp('wc1-fast', 'FAST', 'Slow', ['Quick', 'Tall', 'Loud'], 'A cheetah is fast — a turtle is the opposite!'),
+  mOpp('wc1-day', 'DAY', 'Night', ['Morning', 'Cloud', 'Play'], 'The sun shines in the day; stars shine at night!'),
+  mOpp('wc1-full', 'FULL', 'Empty', ['Heavy', 'Big', 'Open'], 'When you finish your cup of juice, it is no longer full — it is empty!'),
+  mOpp('wc1-big', 'BIG', 'Small', ['Giant', 'Round', 'Soft'], 'An elephant is big — a ladybug is small!'),
+  mOpp('wc1-happy', 'HAPPY', 'Sad', ['Glad', 'Funny', 'Silly'], 'Smiling means happy; crying means the opposite!'),
+  mOpp('wc1-up', 'UP', 'Down', ['High', 'Over', 'Jump'], 'Balloons float up; rain drops fall down!'),
+  mOpp('wc1-open', 'OPEN', 'Closed', ['Wide', 'Door', 'Inside'], 'When you shut the door, it is closed!'),
+  mOpp('wc1-wet', 'WET', 'Dry', ['Rainy', 'Splash', 'Cold'], 'A towel turns wet hands dry!'),
+  mOpp('wc1-loud', 'LOUD', 'Quiet', ['Noisy', 'Boom', 'Drum'], 'A drum is loud; a whisper is quiet!'),
+  mOpp('wc1-hard', 'HARD', 'Soft', ['Rock', 'Flat', 'Heavy'], 'A brick is hard; a fluffy pillow is soft!'),
+  mOpp('wc1-light', 'LIGHT', 'Heavy', ['Feather', 'Bright', 'Fast'], 'A feather is light; a big boulder is heavy!'),
+  mOpp('wc1-tall', 'TALL', 'Short', ['Long', 'High', 'Tree'], 'A giraffe is tall; a mouse is short!'),
+  mOpp('wc1-old', 'OLD', 'New', ['Gray', 'Past', 'Slow'], 'A brand-new shiny bike is the opposite of an old one!'),
+  mOpp('wc1-clean', 'CLEAN', 'Dirty', ['Soap', 'Bright', 'Neat'], 'Playing in mud puddles makes clean boots dirty!'),
+  mOpp('wc1-sweet', 'SWEET', 'Sour', ['Candy', 'Warm', 'Yummy'], 'Strawberries are sweet; lemons are sour!'),
+  mOpp('wc1-push', 'PUSH', 'Pull', ['Roll', 'Stop', 'Kick'], 'You push a swing forward and pull a wagon behind you!'),
+  mOpp('wc1-awake', 'AWAKE', 'Asleep', ['Play', 'Sunny', 'Ready'], 'In the morning you are awake; at bedtime you fall asleep!'),
+
+  // Odd One Out (16)
+  mOdd('wc1-odd-fruit', 'School Bus', ['Apple', 'Banana', 'Strawberry'], 'Three are fruits you can eat — one is a vehicle!'),
+  mOdd('wc1-odd-animal', 'Pillow', ['Lion', 'Elephant', 'Giraffe'], 'Three are animals — one goes on your bed!'),
+  mOdd('wc1-odd-table', 'Snowman', ['Fork', 'Spoon', 'Plate'], 'Three belong on a dinner table!'),
+  mOdd('wc1-odd-color', 'Shoe', ['Red', 'Blue', 'Yellow'], 'Three are colors — one goes on your foot!'),
+  mOdd('wc1-odd-shape', 'Carrot', ['Circle', 'Square', 'Triangle'], 'Three are shapes — one is a crunchy vegetable!'),
+  mOdd('wc1-odd-weather', 'Chair', ['Rain', 'Snow', 'Wind'], 'Three are kinds of weather — one is furniture!'),
+  mOdd('wc1-odd-bird', 'Truck', ['Robin', 'Owl', 'Duck'], 'Three are birds with feathers — one has wheels!'),
+  mOdd('wc1-odd-clothes', 'Hammer', ['Shirt', 'Pants', 'Socks'], 'Three are clothes you wear — one is a tool!'),
+  mOdd('wc1-odd-farm', 'Pencil', ['Cow', 'Pig', 'Sheep'], 'Three are farm animals — one draws pictures!'),
+  mOdd('wc1-odd-ocean', 'Toaster', ['Whale', 'Shark', 'Octopus'], 'Three live in the ocean — one sits in the kitchen!'),
+  mOdd('wc1-odd-toy', 'Broccoli', ['Teddy Bear', 'Blocks', 'Ball'], 'Three are toys to play with — one is a green veggie!'),
+  mOdd('wc1-odd-body', 'Spoon', ['Nose', 'Elbow', 'Knee'], 'Three are parts of your body!'),
+  mOdd('wc1-odd-music', 'Broom', ['Drum', 'Piano', 'Guitar'], 'Three are musical instruments — one sweeps the floor!'),
+  mOdd('wc1-odd-bug', 'Book', ['Ant', 'Bee', 'Ladybug'], 'Three are tiny insects — one has pages to read!'),
+  mOdd('wc1-odd-sky', 'Sandwich', ['Sun', 'Moon', 'Cloud'], 'Three are up in the sky — one goes in a lunchbox!'),
+  mOdd('wc1-odd-ride', 'Flower', ['Bike', 'Train', 'Boat'], 'Three are ways to travel — one grows in a garden!'),
+
+  // Simple Concrete Word Pairs (10)
+  mAnalogy('wc1-p-sound', 'Dog', 'Bark', 'Cat', 'Meow', ['Swim', 'Tail', 'Milk'], 'A dog says bark — what sound does a cat make?'),
+  mAnalogy('wc1-p-home', 'Bird', 'Nest', 'Bee', 'Hive', ['Tree', 'Pond', 'Wing'], 'A bird lives in a nest — a bee lives in a hive!'),
+  mAnalogy('wc1-p-where', 'Fish', 'Water', 'Bird', 'Sky', ['Sand', 'Bed', 'Bowl'], 'A fish swims in water — a bird flies in the sky!'),
+  mAnalogy('wc1-p-wear', 'Shoe', 'Foot', 'Hat', 'Head', ['Hand', 'Knee', 'Coat'], 'You put a shoe on your foot — you put a hat on your head!'),
+  mAnalogy('wc1-p-brush', 'Toothbrush', 'Teeth', 'Comb', 'Hair', ['Hands', 'Shoes', 'Ears'], 'A toothbrush cleans teeth — a comb tidies hair!'),
+  mAnalogy('wc1-p-farm', 'Cow', 'Milk', 'Hen', 'Egg', ['Wool', 'Hay', 'Barn'], 'Milk comes from a cow — an egg comes from a hen!'),
+  mAnalogy('wc1-p-sky', 'Sun', 'Day', 'Moon', 'Night', ['Rain', 'Hot', 'Cloud'], 'The sun shines in the day — the moon shines at night!'),
+  mAnalogy('wc1-p-art', 'Crayon', 'Draw', 'Scissors', 'Cut', ['Glue', 'Paint', 'Read'], 'You draw with a crayon — you cut with scissors!'),
+  mAnalogy('wc1-p-weather', 'Rain', 'Umbrella', 'Cold', 'Coat', ['Swimsuit', 'Sand', 'Ball'], 'In the rain you use an umbrella — in the cold you wear a coat!'),
+  mAnalogy('wc1-p-ride', 'Car', 'Road', 'Boat', 'Water', ['Grass', 'Snow', 'Track'], 'A car drives on a road — a boat sails on water!'),
 ];
 
+// Tier 2 (Explorer, Ages 7–8): 46 items — Analogies (18), Opp/Syn (12), Ladders (10), Homophones (6)
 const TIER2_ITEMS = [
-  {
-    kind: 'choice',
-    subkind: 'analogy',
-    badge: 'Word Pair',
-    prompt: 'Complete the matching word pair!',
-    pairA: ['Bird', 'Fly'],
-    pairBLeft: 'Fish',
-    options: ['Swim', 'Bark', 'Climb', 'Nest'],
-    answer: 'Swim',
-    tip: 'Ask: how does a bird move? It flies! How does a fish move?',
-  },
-  {
-    kind: 'choice',
-    subkind: 'analogy',
-    badge: 'Word Pair',
-    prompt: 'Complete the matching word pair!',
-    pairA: ['Puppy', 'Dog'],
-    pairBLeft: 'Kitten',
-    options: ['Cat', 'Mouse', 'Barn', 'Milk'],
-    answer: 'Cat',
-    tip: 'A puppy grows up into a dog — what does a kitten grow up into?',
-  },
-  {
-    kind: 'choice',
-    subkind: 'analogy',
-    badge: 'Word Pair',
-    prompt: 'Complete the matching word pair!',
-    pairA: ['Winter', 'Cold'],
-    pairBLeft: 'Summer',
-    options: ['Hot', 'Snow', 'Coat', 'Leaf'],
-    answer: 'Hot',
-    tip: 'Winter weather is cold — what is summer weather like?',
-  },
-  {
-    kind: 'choice',
-    subkind: 'analogy',
-    badge: 'Word Pair',
-    prompt: 'Complete the matching word pair!',
-    pairA: ['Glove', 'Hand'],
-    pairBLeft: 'Sock',
-    options: ['Foot', 'Hat', 'Head', 'Coat'],
-    answer: 'Foot',
-    tip: 'You put a glove on your hand; where do you put a sock?',
-  },
-  {
-    kind: 'choice',
-    subkind: 'synonym',
-    badge: 'Same Meaning',
-    prompt: 'Find the word with almost the same meaning!',
-    targetWord: 'ENORMOUS',
-    options: ['Gigantic', 'Tiny', 'Gentle', 'Bumpy'],
-    answer: 'Gigantic',
-    tip: 'An enormous whale is super, super big!',
-  },
-  {
-    kind: 'choice',
-    subkind: 'opposite',
-    badge: 'Opposite',
-    prompt: 'Find the opposite word!',
-    targetWord: 'ANCIENT',
-    options: ['Modern', 'Rusty', 'Golden', 'Quiet'],
-    answer: 'Modern',
-    tip: 'Ancient means very old (like pyramids); the opposite means brand-new or current!',
-  },
-  {
-    kind: 'ladder',
-    badge: 'Shades of Meaning',
-    prompt: 'Arrange the words in order!',
-    directionLabel: 'Quietest → Loudest',
-    ordered: ['Whisper', 'Speak', 'Shout'],
-    labels: ['1. Quietest', '2. Medium', '3. Loudest'],
-    tip: 'Start with the softest voice, then normal talking, then the biggest voice!',
-  },
+  // Analogies (18)
+  mAnalogy('wc2-a-move', 'Bird', 'Fly', 'Fish', 'Swim', ['Bark', 'Climb', 'Nest'], 'How does a bird move? It flies! How does a fish move?'),
+  mAnalogy('wc2-a-baby', 'Puppy', 'Dog', 'Kitten', 'Cat', ['Mouse', 'Barn', 'Milk'], 'A puppy grows into a dog — a kitten grows into a cat!'),
+  mAnalogy('wc2-a-season', 'Winter', 'Cold', 'Summer', 'Hot', ['Snow', 'Coat', 'Leaf'], 'Winter weather is cold — summer weather is hot!'),
+  mAnalogy('wc2-a-wear', 'Glove', 'Hand', 'Sock', 'Foot', ['Hat', 'Head', 'Coat'], 'A glove goes on your hand — a sock goes on your foot!'),
+  mAnalogy('wc2-a-work', 'Chef', 'Kitchen', 'Teacher', 'Classroom', ['Hospital', 'Garage', 'Stage'], 'A chef works in a kitchen — a teacher works in a classroom!'),
+  mAnalogy('wc2-a-sense', 'Book', 'Read', 'Song', 'Listen', ['Write', 'Bounce', 'Cook'], 'You read a book — you listen to a song!'),
+  mAnalogy('wc2-a-tool', 'Hammer', 'Nail', 'Key', 'Lock', ['Wood', 'Door', 'Rope'], 'A hammer works on a nail — a key opens a lock!'),
+  mAnalogy('wc2-a-part', 'Wheel', 'Bicycle', 'Wing', 'Airplane', ['Pilot', 'Cloud', 'Road'], 'A wheel is part of a bicycle — a wing is part of an airplane!'),
+  mAnalogy('wc2-a-cover', 'Leaf', 'Tree', 'Feather', 'Bird', ['Nest', 'Sky', 'Branch'], 'Leaves grow on a tree — feathers grow on a bird!'),
+  mAnalogy('wc2-a-maker', 'Baker', 'Bread', 'Painter', 'Picture', ['Brush', 'Oven', 'Wall'], 'A baker makes bread — a painter makes a picture!'),
+  mAnalogy('wc2-a-grow', 'Seed', 'Plant', 'Egg', 'Chick', ['Nest', 'Shell', 'Soil'], 'A seed grows into a plant — an egg hatches into a chick!'),
+  mAnalogy('wc2-a-body', 'Eye', 'See', 'Ear', 'Hear', ['Smell', 'Blink', 'Talk'], 'Your eye helps you see — your ear helps you hear!'),
+  mAnalogy('wc2-a-shop', 'Library', 'Books', 'Bakery', 'Bread', ['Shoes', 'Toys', 'Cars'], 'You get books at a library — you get bread at a bakery!'),
+  mAnalogy('wc2-a-measure', 'Ruler', 'Length', 'Clock', 'Time', ['Weight', 'Color', 'Sound'], 'A ruler measures length — a clock measures time!'),
+  mAnalogy('wc2-a-desk', 'Pencil', 'Write', 'Eraser', 'Erase', ['Paper', 'Fold', 'Glue'], 'A pencil writes — an eraser erases!'),
+  mAnalogy('wc2-a-temp', 'Ice', 'Freeze', 'Fire', 'Burn', ['Melt', 'Float', 'Glow'], 'Ice can freeze — fire can burn!'),
+  mAnalogy('wc2-a-calf', 'Fawn', 'Deer', 'Calf', 'Cow', ['Barn', 'Sheep', 'Wool'], 'A fawn is a young deer — a calf is a young cow!'),
+  mAnalogy('wc2-a-pilot', 'Doctor', 'Hospital', 'Pilot', 'Airplane', ['Boat', 'School', 'Farm'], 'A doctor works in a hospital — a pilot flies an airplane!'),
+
+  // Synonyms & Opposites (12)
+  mSyn('wc2-s-enormous', 'ENORMOUS', 'Gigantic', ['Tiny', 'Gentle', 'Bumpy'], 'An enormous whale is super, super big!'),
+  mOpp('wc2-o-ancient', 'ANCIENT', 'Modern', ['Rusty', 'Golden', 'Quiet'], 'Ancient means very old; modern means brand-new or current!'),
+  mSyn('wc2-s-brave', 'BRAVE', 'Courageous', ['Scared', 'Sleepy', 'Quiet'], 'Someone brave shows courage even when nervous!'),
+  mSyn('wc2-s-tiny', 'TINY', 'Miniature', ['Giant', 'Loud', 'Heavy'], 'Miniature means super tiny, like a dollhouse cup!'),
+  mOpp('wc2-o-generous', 'GENEROUS', 'Selfish', ['Kind', 'Happy', 'Cheerful'], 'Generous means loving to share — selfish keeps everything!'),
+  mSyn('wc2-s-swift', 'SWIFT', 'Rapid', ['Slow', 'Heavy', 'Soft'], 'Swift and rapid both mean super quick!'),
+  mOpp('wc2-o-fragile', 'FRAGILE', 'Sturdy', ['Glass', 'Thin', 'Breakable'], 'Fragile breaks easily — sturdy is strong and solid!'),
+  mSyn('wc2-s-glad', 'GLAD', 'Cheerful', ['Grumpy', 'Tired', 'Shy'], 'Glad and cheerful both describe a bright, happy mood!'),
+  mOpp('wc2-o-shallow', 'SHALLOW', 'Deep', ['Wet', 'Clear', 'Wide'], 'A puddle is shallow; the ocean is deep!'),
+  mSyn('wc2-s-silent', 'SILENT', 'Quiet', ['Noisy', 'Bright', 'Fast'], 'Silent means completely quiet with zero sound!'),
+  mOpp('wc2-o-expand', 'EXPAND', 'Shrink', ['Stretch', 'Grow', 'Rise'], 'A balloon expands when blown up and shrinks when air lets out!'),
+  mSyn('wc2-s-famous', 'FAMOUS', 'Well-known', ['Hidden', 'Ordinary', 'Secret'], 'Famous means known by lots of people!'),
+
+  // Shades of Meaning Ladders (10)
+  mLadder('wc2-l-voice', 'Quietest → Loudest', ['Whisper', 'Speak', 'Shout'], ['1. Quietest', '2. Medium', '3. Loudest'], 'Start with the softest voice, then normal talking, then the biggest voice!'),
+  mLadder('wc2-l-heat', 'Mildest → Hottest', ['Warm', 'Hot', 'Boiling'], ['1. Mild', '2. Stronger', '3. Hottest'], 'Warm cocoa → hot soup → bubbling boiling water!'),
+  mLadder('wc2-l-rain', 'Lightest → Heaviest Rain', ['Drizzle', 'Rain', 'Downpour'], ['1. Light', '2. Steady', '3. Heavy'], 'A drizzle is tiny drops; a downpour is pouring rain!'),
+  mLadder('wc2-l-move', 'Slowest → Fastest', ['Walk', 'Jog', 'Sprint'], ['1. Slowest', '2. Medium', '3. Fastest'], 'Walking is calm, jogging is steady, sprinting is top speed!'),
+  mLadder('wc2-l-joy', 'Smallest → Biggest Laugh', ['Smile', 'Chuckle', 'Roar'], ['1. Quiet', '2. Medium', '3. Biggest'], 'A silent smile → a soft chuckle → roaring with laughter!'),
+  mLadder('wc2-l-water', 'Smallest → Biggest Water', ['Puddle', 'Pond', 'Ocean'], ['1. Smallest', '2. Medium', '3. Huge'], 'Step over a puddle, duck-feed at a pond, sail across an ocean!'),
+  mLadder('wc2-l-wet', 'Least → Most Wet', ['Damp', 'Wet', 'Soaking'], ['1. Slightly', '2. Clearly', '3. Dripping'], 'Damp is barely moist; soaking means dripping wet!'),
+  mLadder('wc2-l-look', 'Quickest → Longest Look', ['Glance', 'Look', 'Stare'], ['1. Quick', '2. Normal', '3. Long'], 'A glance takes a split second; a stare doesn’t blink!'),
+  mLadder('wc2-l-sleep', 'Shortest → Longest Rest', ['Nap', 'Sleep', 'Hibernate'], ['1. Short', '2. Overnight', '3. All Winter'], 'A quick afternoon nap → full night sleep → a bear hibernating all winter!'),
+  mLadder('wc2-l-size', 'Smallest → Biggest', ['Tiny', 'Medium', 'Gigantic'], ['1. Smallest', '2. Middle', '3. Biggest'], 'From ant-sized tiny to whale-sized gigantic!'),
+
+  // Homophones in Context (6)
+  mSent('wc2-h-knight', 'Sound-Alike Word', 'The brave ', ' rode his horse to the castle.', 'knight', ['night', 'nite', 'knit'], 'A medieval warrior is spelled KNIGHT (with a silent K)!'),
+  mSent('wc2-h-pear', 'Sound-Alike Word', 'Maya packed a juicy green ', ' in her lunchbox.', 'pear', ['pair', 'pare', 'peer'], 'The sweet fruit is PEAR; two matching shoes are a PAIR!'),
+  mSent('wc2-h-flower', 'Sound-Alike Word', 'A bright yellow ', ' bloomed in the sunny garden.', 'flower', ['flour', 'floor', 'flow'], 'Plants bloom into a FLOWER; bakers scoop white FLOUR!'),
+  mSent('wc2-h-sea', 'Sound-Alike Word', 'Dolphins leaped high above the blue ', '.', 'sea', ['see', 'seed', 'seat'], 'Ocean water is SEA; you look with your eyes to SEE!'),
+  mSent('wc2-h-write', 'Sound-Alike Word', 'Please ', ' your name neatly at the top of the page.', 'write', ['right', 'ride', 'white'], 'Putting words on paper is WRITE (with a silent W)!'),
+  mSent('wc2-h-there', 'Sound-Alike Word', 'Put the heavy library books right over ', ' on the table.', 'there', ['their', "they're", 'them'], 'THERE points to a place (notice "here" inside t-HERE)!'),
 ];
 
+// Tier 3 (Challenger, Ages 9–10): 46 items — Analogies (16), Ladders (12), Context Sentences (12), Idioms (6)
 const TIER3_ITEMS = [
-  {
-    kind: 'ladder',
-    badge: 'Shades of Meaning',
-    prompt: 'Arrange the words in order!',
-    directionLabel: 'Coolest → Coldest',
-    ordered: ['Cool', 'Chilly', 'Freezing'],
-    labels: ['1. Mild', '2. Stronger', '3. Most Intense'],
-    tip: 'Think of a crisp autumn breeze → needing a jacket → turning water into ice!',
-  },
-  {
-    kind: 'ladder',
-    badge: 'Shades of Meaning',
-    prompt: 'Arrange the words in order!',
-    directionLabel: 'Slowest → Fastest',
-    ordered: ['Stroll', 'Jog', 'Sprint'],
-    labels: ['1. Slowest', '2. Medium', '3. Fastest'],
-    tip: 'A stroll is a relaxed walk; a sprint is full racing speed!',
-  },
-  {
-    kind: 'ladder',
-    badge: 'Shades of Meaning',
-    prompt: 'Arrange the words in order!',
-    directionLabel: 'Smallest → Biggest',
-    ordered: ['Tiny', 'Average', 'Colossal'],
-    labels: ['1. Smallest', '2. Middle', '3. Biggest'],
-    tip: 'Colossal means giant-sized, like a skyscraper or blue whale!',
-  },
-  {
-    kind: 'choice',
-    subkind: 'analogy',
-    badge: 'Word Pair',
-    prompt: 'Complete the matching word pair!',
-    pairA: ['Author', 'Book'],
-    pairBLeft: 'Composer',
-    options: ['Symphony', 'Library', 'Violin', 'Stage'],
-    answer: 'Symphony',
-    tip: 'An author creates a book — what finished work does a composer create?',
-  },
-  {
-    kind: 'choice',
-    subkind: 'analogy',
-    badge: 'Word Pair',
-    prompt: 'Complete the matching word pair!',
-    pairA: ['Compass', 'Direction'],
-    pairBLeft: 'Thermometer',
-    options: ['Temperature', 'Weather', 'Mercury', 'Winter'],
-    answer: 'Temperature',
-    tip: 'A compass tells you direction — what exact thing does a thermometer measure?',
-  },
-  {
-    kind: 'choice',
-    subkind: 'analogy',
-    badge: 'Word Pair',
-    prompt: 'Complete the matching word pair!',
-    pairA: ['Petal', 'Flower'],
-    pairBLeft: 'Chapter',
-    options: ['Book', 'Page', 'Storyteller', 'Cover'],
-    answer: 'Book',
-    tip: 'Part-to-whole relationship! A petal is one part of a flower; a chapter is one part of a ___!',
-  },
-  {
-    kind: 'choice',
-    subkind: 'sentence',
-    badge: 'Precise Word',
-    prompt: 'Choose the word that fits best!',
-    sentenceBefore: 'The scientist was ',
-    sentenceAfter: ' to check every measurement twice.',
-    options: ['Meticulous', 'Careless', 'Drowsy', 'Boastful'],
-    answer: 'Meticulous',
-    tip: 'Meticulous means paying super careful attention to every tiny detail!',
-  },
+  // Analogies (16)
+  mAnalogy('wc3-a-author', 'Author', 'Book', 'Composer', 'Symphony', ['Library', 'Violin', 'Stage'], 'An author creates a book — a composer creates a symphony!'),
+  mAnalogy('wc3-a-compass', 'Compass', 'Direction', 'Thermometer', 'Temperature', ['Weather', 'Mercury', 'Winter'], 'A compass tells direction — a thermometer measures temperature!'),
+  mAnalogy('wc3-a-petal', 'Petal', 'Flower', 'Chapter', 'Book', ['Page', 'Storyteller', 'Cover'], 'Part-to-whole! A petal is part of a flower; a chapter is part of a book!'),
+  mAnalogy('wc3-a-sculptor', 'Sculptor', 'Statue', 'Architect', 'Building', ['Hammer', 'City', 'Brick'], 'A sculptor creates a statue — an architect designs a building!'),
+  mAnalogy('wc3-a-hive', 'Hive', 'Bee', 'Den', 'Bear', ['Forest', 'Honey', 'Cave'], 'A hive is a bee’s home — a den is a bear’s home!'),
+  mAnalogy('wc3-a-diet', 'Herbivore', 'Plants', 'Carnivore', 'Meat', ['Forest', 'Teeth', 'Water'], 'Herbivores eat plants — carnivores eat meat!'),
+  mAnalogy('wc3-a-nocturnal', 'Nocturnal', 'Night', 'Diurnal', 'Day', ['Sleep', 'Owl', 'Moon'], 'Nocturnal animals are active at night — diurnal animals are active by day!'),
+  mAnalogy('wc3-a-geom', 'Radius', 'Circle', 'Side', 'Square', ['Ruler', 'Corner', 'Round'], 'A radius defines a circle — a side defines a square!'),
+  mAnalogy('wc3-a-propel', 'Oar', 'Rowboat', 'Pedal', 'Bicycle', ['Helmet', 'Wheel', 'Path'], 'You push an oar to power a rowboat — you push a pedal to power a bicycle!'),
+  mAnalogy('wc3-a-spark', 'Spark', 'Fire', 'Seed', 'Forest', ['Leaf', 'Rain', 'Smoke'], 'A tiny spark grows into a fire — a tiny seed grows into a forest!'),
+  mAnalogy('wc3-a-map', 'Map', 'Geography', 'Timeline', 'History', ['Clock', 'Atlas', 'Future'], 'Maps organize geography — timelines organize history!'),
+  mAnalogy('wc3-a-stanza', 'Stanza', 'Poem', 'Paragraph', 'Essay', ['Sentence', 'Title', 'Author'], 'A stanza is a section of a poem — a paragraph is a section of an essay!'),
+  mAnalogy('wc3-a-group', 'Flock', 'Birds', 'School', 'Fish', ['Teacher', 'Ocean', 'Wings'], 'A group of birds is a flock — a group of fish is a school!'),
+  mAnalogy('wc3-a-courage', 'Courage', 'Brave', 'Wisdom', 'Wise', ['Clever', 'Book', 'Kind'], 'Someone full of courage is brave — someone full of wisdom is wise!'),
+  mAnalogy('wc3-a-scale', 'Clock', 'Seconds', 'Scale', 'Weight', ['Heavy', 'Balance', 'Height'], 'A clock measures seconds — a scale measures weight!'),
+  mAnalogy('wc3-a-canyon', 'Canyon', 'Deep', 'Mountain', 'Tall', ['Rock', 'Snow', 'Wide'], 'A canyon is known for being deep — a mountain for being tall!'),
+
+  // Shades of Meaning Ladders (12)
+  mLadder('wc3-l-cold', 'Coolest → Coldest', ['Cool', 'Chilly', 'Freezing'], ['1. Mild', '2. Stronger', '3. Intense'], 'Crisp breeze → needing a jacket → turning water into ice!'),
+  mLadder('wc3-l-speed', 'Slowest → Fastest', ['Stroll', 'Jog', 'Sprint'], ['1. Slowest', '2. Medium', '3. Fastest'], 'A stroll is a relaxed walk; a sprint is full racing speed!'),
+  mLadder('wc3-l-size', 'Smallest → Biggest', ['Tiny', 'Average', 'Colossal'], ['1. Smallest', '2. Middle', '3. Biggest'], 'Colossal means giant-sized, like a blue whale!'),
+  mLadder('wc3-l-anger', 'Mildest → Strongest Anger', ['Annoyed', 'Angry', 'Furious'], ['1. Mild', '2. Clear', '3. Extreme'], 'Slightly bothered (annoyed) → mad (angry) → boiling over (furious)!'),
+  mLadder('wc3-l-happy', 'Calmest → Most Thrilled', ['Content', 'Happy', 'Ecstatic'], ['1. Peaceful', '2. Glad', '3. Overjoyed'], 'Content is peaceful satisfaction; ecstatic is bursting with joy!'),
+  mLadder('wc3-l-light', 'Softest → Brightest Light', ['Dim', 'Bright', 'Blinding'], ['1. Faint', '2. Clear', '3. Intense'], 'A dim nightlight → a bright lamp → blinding noon sun!'),
+  mLadder('wc3-l-flow', 'Smallest → Strongest Flow', ['Trickle', 'Stream', 'Torrent'], ['1. Tiny', '2. Steady', '3. Rushing'], 'A thin trickle → a steady stream → a powerful rushing torrent!'),
+  mLadder('wc3-l-wind', 'Gentlest → Fiercest Wind', ['Breeze', 'Gale', 'Hurricane'], ['1. Gentle', '2. Strong', '3. Fierce'], 'A soft summer breeze → a strong gale → a massive hurricane!'),
+  mLadder('wc3-l-hungry', 'Least → Most Hungry', ['Peckish', 'Hungry', 'Famished'], ['1. Slight', '2. Ready', '3. Starving'], 'Peckish wants a snack; famished feels completely starved!'),
+  mLadder('wc3-l-good', 'Good → Amazing', ['Good', 'Impressive', 'Extraordinary'], ['1. Solid', '2. Great', '3. Rare'], 'Extraordinary literally means beyond ordinary!'),
+  mLadder('wc3-l-fear', 'Mildest → Strongest Fear', ['Nervous', 'Scared', 'Terrified'], ['1. Mild', '2. Clear', '3. Intense'], 'Butterflies (nervous) → afraid (scared) → frozen in fear (terrified)!'),
+  mLadder('wc3-l-sound', 'Softest → Loudest', ['Murmur', 'Announce', 'Bellow'], ['1. Soft', '2. Clear', '3. Booming'], 'A low murmur → a clear announcement → a booming bellow!'),
+
+  // Context-Clue Sentences (12)
+  mSent('wc3-c-meticulous', 'Precise Word', 'The scientist was ', ' to check every measurement twice.', 'Meticulous', ['Careless', 'Drowsy', 'Boastful'], 'Meticulous means paying super careful attention to every tiny detail!'),
+  mSent('wc3-c-persevere', 'Precise Word', 'Even after her Lego bridge fell twice, Ava chose to ', ' until it held.', 'Persevere', ['Quit', 'Forget', 'Wander'], 'Persevere means keeping going even when something gets tough!'),
+  mSent('wc3-c-camouflage', 'Precise Word', 'The green gecko used ', ' to blend right into the jungle leaves.', 'Camouflage', ['Applause', 'Gravity', 'Echoes'], 'Camouflage hides an animal by matching its surroundings!'),
+  mSent('wc3-c-reluctant', 'Precise Word', 'At first, Leo was ', ' to jump off the high diving board, so he waited.', 'Reluctant', ['Eager', 'Certain', 'Reckless'], 'Reluctant means hesitant or not quite wanting to do something yet!'),
+  mSent('wc3-c-abundant', 'Precise Word', 'After the spring rains, wildflowers were ', ' across the whole valley.', 'Abundant', ['Scarce', 'Invisible', 'Broken'], 'Abundant means plentiful — lots and lots of something!'),
+  mSent('wc3-c-scarce', 'Precise Word', 'In the dry desert, fresh drinking water is ', ' and precious.', 'Scarce', ['Abundant', 'Noisy', 'Careless'], 'Scarce means rare or in very short supply!'),
+  mSent('wc3-c-ingenious', 'Precise Word', 'Using a rubber band and two spoons, Sam built an ', ' mini-catapult.', 'Ingenious', ['Clumsy', 'Ordinary', 'Boring'], 'Ingenious means super clever and inventive!'),
+  mSent('wc3-c-transparent', 'Precise Word', 'The mountain lake was so ', ' we could count pebbles on the bottom.', 'Transparent', ['Muddy', 'Solid', 'Opaque'], 'Transparent means completely see-through!'),
+  mSent('wc3-c-cautious', 'Precise Word', 'Because the sidewalk was icy, we took slow, ', ' steps.', 'Cautious', ['Wild', 'Careless', 'Hurried'], 'Cautious means careful to avoid danger!'),
+  mSent('wc3-c-adapt', 'Precise Word', 'Arctic foxes grow thick white fur to ', ' to snowy winters.', 'Adapt', ['Complain', 'Vanish', 'Freeze'], 'Adapt means changing to fit a new environment!'),
+  mSent('wc3-c-enthusiastic', 'Precise Word', 'The crowd gave an ', ' cheer when the robotics team succeeded.', 'Enthusiastic', ['Bored', 'Silent', 'Grumpy'], 'Enthusiastic means full of lively excitement!'),
+  mSent('wc3-c-fragile', 'Precise Word', 'Pack the glass ornament in bubble wrap because it is ', '.', 'Fragile', ['Sturdy', 'Flexible', 'Bouncy'], 'Fragile means delicate and easily broken!'),
+
+  // Idioms & Figurative Meaning (6)
+  mDef('wc3-i-ice', 'Idiom Detective', 'What does this saying really mean?', '“Playing a quick game helped everyone break the ice.”', 'Make people feel relaxed', ['Crack frozen water', 'Go ice skating', 'End the party'], 'Breaking the ice warms up a shy room so people start chatting!'),
+  mDef('wc3-i-cake', 'Idiom Detective', 'What does this saying really mean?', '“After practicing all week, the spelling quiz was a piece of cake!”', 'Super easy to do', ['Time for dessert', 'Very messy', 'Impossible to finish'], 'A piece of cake is an idiom meaning something felt effortless!'),
+  mDef('wc3-i-beans', 'Idiom Detective', 'What does this saying really mean?', '“Try not to spill the beans about Mom’s surprise party!”', 'Accidentally tell a secret', ['Drop dinner on the floor', 'Plant a garden', 'Speak too quietly'], 'Spilling the beans means accidentally revealing a secret!'),
+  mDef('wc3-i-weather', 'Idiom Detective', 'What does this saying really mean?', '“Noah stayed home to rest because he felt under the weather.”', 'Feeling a little sick', ['Standing in the rain', 'Watching clouds', 'Feeling super energetic'], 'Under the weather is an idiom for feeling unwell!'),
+  mDef('wc3-i-nail', 'Idiom Detective', 'What does this saying really mean?', '“Your explanation hit the nail on the head!”', 'Was completely accurate', ['Used a real hammer', 'Made a loud noise', 'Missed the target'], 'Hitting the nail on the head means getting an answer or idea 100% right!'),
+  mDef('wc3-i-chew', 'Idiom Detective', 'What does this saying really mean?', '“Signing up for five clubs at once was biting off more than she could chew.”', 'Taking on too much at once', ['Eating lunch too fast', 'Loving spicy food', 'Having nothing to do'], 'Taking on more tasks than you can comfortably handle!'),
 ];
 
+// Tier 4 (Trailblazer, Ages 11+): 44 items — Analogies (16), Ladders (10), Precision Definitions (10), Inference Sentences (8)
 const TIER4_ITEMS = [
-  {
-    kind: 'ladder',
-    badge: 'Shades of Meaning',
-    prompt: 'Arrange the words in order!',
-    directionLabel: 'Calmest → Most Worried',
-    ordered: ['Uneasy', 'Anxious', 'Frantic'],
-    labels: ['1. Mild', '2. Moderate', '3. Intense'],
-    tip: 'Uneasy is a slight flutter; frantic means overwhelmed in panic.',
-  },
-  {
-    kind: 'ladder',
-    badge: 'Shades of Meaning',
-    prompt: 'Arrange the words in order!',
-    directionLabel: 'Least → Most Interested',
-    ordered: ['Curious', 'Eager', 'Obsessed'],
-    labels: ['1. Mild', '2. Strong', '3. Extreme'],
-    tip: 'Curious asks a question; eager cannot wait; obsessed thinks of nothing else.',
-  },
-  {
-    kind: 'choice',
-    subkind: 'analogy',
-    badge: 'Word Pair',
-    prompt: 'Complete the matching word pair!',
-    pairA: ['Drought', 'Rain'],
-    pairBLeft: 'Famine',
-    options: ['Food', 'Desert', 'Harvest', 'Storm'],
-    answer: 'Food',
-    tip: 'Relationship = lack of! A drought is a severe lack of rain; a famine is a severe lack of ___.',
-  },
-  {
-    kind: 'choice',
-    subkind: 'analogy',
-    badge: 'Word Pair',
-    prompt: 'Complete the matching word pair!',
-    pairA: ['Blueprint', 'Building'],
-    pairBLeft: 'Recipe',
-    options: ['Dish', 'Kitchen', 'Oven', 'Chef'],
-    answer: 'Dish',
-    tip: 'A blueprint is the plan for making a building; a recipe is the plan for making a ___.',
-  },
-  {
-    kind: 'choice',
-    subkind: 'definition',
-    badge: 'Precise Word',
-    prompt: 'Which word matches this meaning?',
-    definition: 'Able to recover quickly from setbacks or tough moments.',
-    options: ['Resilient', 'Fragile', 'Reluctant', 'Indifferent'],
-    answer: 'Resilient',
-    tip: 'Think of a spring bouncing back — resilient means bouncing back strong!',
-  },
-  {
-    kind: 'choice',
-    subkind: 'analogy',
-    badge: 'Word Pair',
-    prompt: 'Complete the matching word pair!',
-    pairA: ['Telescope', 'Distant'],
-    pairBLeft: 'Microscope',
-    options: ['Tiny', 'Bright', 'Heavy', 'Ancient'],
-    answer: 'Tiny',
-    tip: 'A telescope helps us see distant things; a microscope helps us see ___ things.',
-  },
+  // Analogies (16)
+  mAnalogy('wc4-a-drought', 'Drought', 'Rain', 'Famine', 'Food', ['Desert', 'Harvest', 'Storm'], 'Lack-of link: drought = severe lack of rain; famine = severe lack of food!'),
+  mAnalogy('wc4-a-blueprint', 'Blueprint', 'Building', 'Recipe', 'Dish', ['Kitchen', 'Oven', 'Chef'], 'A blueprint is the plan for a building; a recipe is the plan for a dish!'),
+  mAnalogy('wc4-a-scope', 'Telescope', 'Distant', 'Microscope', 'Tiny', ['Bright', 'Heavy', 'Ancient'], 'A telescope reveals distant objects; a microscope reveals tiny ones!'),
+  mAnalogy('wc4-a-prologue', 'Prologue', 'Beginning', 'Epilogue', 'Ending', ['Chapter', 'Author', 'Index'], 'Prologue opens a story; epilogue closes it after the main action!'),
+  mAnalogy('wc4-a-catalyst', 'Catalyst', 'Accelerate', 'Obstacle', 'Delay', ['Ignore', 'Assist', 'Finish'], 'A catalyst speeds a process up; an obstacle slows or delays it!'),
+  mAnalogy('wc4-a-conductor', 'Conductor', 'Orchestra', 'Director', 'Film', ['Camera', 'Ticket', 'Audience'], 'A conductor guides an orchestra; a director guides a film!'),
+  mAnalogy('wc4-a-symptom', 'Symptom', 'Illness', 'Clue', 'Mystery', ['Detective', 'Novel', 'Secret'], 'A symptom points to an illness; a clue points to solving a mystery!'),
+  mAnalogy('wc4-a-fossil', 'Fossil', 'Past', 'Prototype', 'Future', ['Museum', 'Stone', 'History'], 'A fossil is evidence from the past; a prototype models something for the future!'),
+  mAnalogy('wc4-a-syn', 'Synonym', 'Similar', 'Antonym', 'Opposite', ['Rhyme', 'Spell', 'Repeat'], 'Synonyms share similar meanings; antonyms have opposite meanings!'),
+  mAnalogy('wc4-a-mono', 'Monologue', 'One', 'Dialogue', 'Two', ['Many', 'Zero', 'Silent'], 'Mono = one speaker; dia = conversation between two!'),
+  mAnalogy('wc4-a-oasis', 'Oasis', 'Desert', 'Island', 'Ocean', ['Beach', 'River', 'Mountain'], 'An oasis is water surrounded by desert; an island is land surrounded by ocean!'),
+  mAnalogy('wc4-a-hypo', 'Hypothesis', 'Experiment', 'Verdict', 'Trial', ['Judge', 'Guess', 'Law'], 'A hypothesis is tested in an experiment; a verdict concludes a trial!'),
+  mAnalogy('wc4-a-portrait', 'Portrait', 'Person', 'Landscape', 'Scenery', ['Frame', 'Museum', 'Brush'], 'A portrait depicts a person; a landscape depicts natural scenery!'),
+  mAnalogy('wc4-a-trib', 'Tributary', 'River', 'Branch', 'Tree', ['Leaf', 'Forest', 'Root'], 'A tributary feeds into a larger river, like a branch joins a tree!'),
+  mAnalogy('wc4-a-bio', 'Autobiography', 'Self', 'Biography', 'Another', ['Fiction', 'Diary', 'History'], 'Auto = written about oneself; biography = written about another person!'),
+  mAnalogy('wc4-a-vaccine', 'Vaccine', 'Prevent', 'Antidote', 'Counteract', ['Cause', 'Spread', 'Diagnose'], 'A vaccine prevents infection ahead of time; an antidote counteracts poison!'),
+
+  // Shades of Meaning Ladders (10)
+  mLadder('wc4-l-worry', 'Calmest → Most Worried', ['Uneasy', 'Anxious', 'Frantic'], ['1. Mild', '2. Moderate', '3. Intense'], 'Uneasy is a slight flutter; frantic is overwhelmed panic!'),
+  mLadder('wc4-l-interest', 'Least → Most Interested', ['Curious', 'Eager', 'Obsessed'], ['1. Mild', '2. Strong', '3. Extreme'], 'Curious asks a question; obsessed thinks of nothing else!'),
+  mLadder('wc4-l-likely', 'Least → Most Certain', ['Plausible', 'Probable', 'Certain'], ['1. Possible', '2. Likely', '3. Sure'], 'Plausible means believable; probable means likely; certain means 100%!'),
+  mLadder('wc4-l-ask', 'Softest → Strongest Request', ['Suggest', 'Urge', 'Demand'], ['1. Gentle', '2. Strong', '3. Command'], 'From polite suggestion to firm urging to insistent demand!'),
+  mLadder('wc4-l-save', 'Balanced → Extreme Saving', ['Thrifty', 'Frugal', 'Miserly'], ['1. Careful', '2. Strict', '3. Extreme'], 'Thrifty spends wisely; miserly refuses to spend even when needed!'),
+  mLadder('wc4-l-doubt', 'Mildest → Strongest Doubt', ['Uncertain', 'Skeptical', 'Incredulous'], ['1. Unsure', '2. Questioning', '3. Disbelieving'], 'Uncertain isn’t sure; incredulous can barely believe it!'),
+  mLadder('wc4-l-harm', 'Mildest → Most Severe', ['Minor', 'Severe', 'Catastrophic'], ['1. Small', '2. Serious', '3. Disastrous'], 'From a minor hiccup to a catastrophic disaster!'),
+  mLadder('wc4-l-art', 'Earliest → Finest Creation', ['Sketch', 'Draft', 'Masterpiece'], ['1. Rough', '2. Working', '3. Finest'], 'A rough sketch → a working draft → a finished masterpiece!'),
+  mLadder('wc4-l-respect', 'Polite → Deepest Respect', ['Cordial', 'Gracious', 'Reverent'], ['1. Friendly', '2. Warm', '3. Deep Awe'], 'Cordial is polite; reverent shows profound awe and respect!'),
+  mLadder('wc4-l-hint', 'Subtlest → Most Direct', ['Imply', 'State', 'Proclaim'], ['1. Hint', '2. Say Clearly', '3. Announce Boldly'], 'Imply hints indirectly; proclaim declares loudly to everyone!'),
+
+  // Precision Academic Definitions (10)
+  mDef('wc4-d-resilient', 'Precise Word', 'Which word matches this meaning?', 'Able to recover quickly from setbacks or tough moments.', 'Resilient', ['Fragile', 'Reluctant', 'Indifferent'], 'Think of a spring bouncing back — resilient means bouncing back strong!'),
+  mDef('wc4-d-pragmatic', 'Precise Word', 'Which word matches this meaning?', 'Focused on practical, realistic solutions rather than just theories.', 'Pragmatic', ['Dreamy', 'Reckless', 'Stubborn'], 'A pragmatic thinker looks at what will actually work in practice!'),
+  mDef('wc4-d-ambiguous', 'Precise Word', 'Which word matches this meaning?', 'Unclear because it can be understood in more than one way.', 'Ambiguous', ['Explicit', 'Obvious', 'Exact'], 'An ambiguous clue leaves two competing meanings open!'),
+  mDef('wc4-d-ephemeral', 'Precise Word', 'Which word matches this meaning?', 'Lasting for only a very brief time, like morning dew or a rainbow.', 'Ephemeral', ['Permanent', 'Eternal', 'Sturdy'], 'Ephemeral things vanish quickly, like cherry blossoms or sunsets!'),
+  mDef('wc4-d-ubiquitous', 'Precise Word', 'Which word matches this meaning?', 'Seeming to appear everywhere at once.', 'Ubiquitous', ['Rare', 'Hidden', 'Ancient'], 'Smartphones and coffee shops feel ubiquitous in modern cities!'),
+  mDef('wc4-d-candid', 'Precise Word', 'Which word matches this meaning?', 'Truthful, direct, and completely open in what you say.', 'Candid', ['Secretive', 'Deceptive', 'Vague'], 'Candid feedback is honest and straightforward!'),
+  mDef('wc4-d-altruistic', 'Precise Word', 'Which word matches this meaning?', 'Showing selfless concern for the well-being of others.', 'Altruistic', ['Selfish', 'Competitive', 'Cautious'], 'Altruistic actions help others without expecting anything back!'),
+  mDef('wc4-d-tenacious', 'Precise Word', 'Which word matches this meaning?', 'Holding firmly to a goal and refusing to let go easily.', 'Tenacious', ['Quitting', 'Timid', 'Casual'], 'Root "ten" = hold! Tenacious means holding on with grit!'),
+  mDef('wc4-d-objective', 'Precise Word', 'Which word matches this meaning?', 'Based on observable facts rather than personal feelings or bias.', 'Objective', ['Biased', 'Emotional', 'Imaginary'], 'Scientists strive to keep experiments objective and fair!'),
+  mDef('wc4-d-empathy', 'Precise Word', 'Which word matches this meaning?', 'The ability to step into someone else’s shoes and understand their feelings.', 'Empathy', ['Apathy', 'Rivalry', 'Pride'], 'Root "path" = feeling; empathy feels WITH someone, apathy feels nothing!'),
+
+  // Contextual Inference Sentences (8)
+  mSent('wc4-s-corroborate', 'Academic Context', 'The witness’s photo helped ', ' the hiker’s surprising story.', 'Corroborate', ['Contradict', 'Erase', 'Exaggerate'], 'Corroborate means backing up a claim with confirming evidence!'),
+  mSent('wc4-s-mitigate', 'Academic Context', 'Planting trees along the riverbank helped ', ' flood damage.', 'Mitigate', ['Worsen', 'Ignore', 'Multiply'], 'Mitigate means reducing how severe or harmful something is!'),
+  mSent('wc4-s-inevitable', 'Academic Context', 'With dark thunderheads overhead, an afternoon downpour seemed ', '.', 'Inevitable', ['Unlikely', 'Preventable', 'Optional'], 'Inevitable means certain to happen — impossible to avoid!'),
+  mSent('wc4-s-scrutinize', 'Academic Context', 'Art historians ', ' brushstrokes under ultraviolet light to spot forgeries.', 'Scrutinize', ['Glance at', 'Overlook', 'Discard'], 'Scrutinize means inspecting closely and critically!'),
+  mSent('wc4-s-unanimous', 'Academic Context', 'Every single student voted yes, making the decision ', '.', 'Unanimous', ['Divided', 'Uncertain', 'Contested'], 'Roots "uni" (one) + "anim" (mind) = everyone in total agreement!'),
+  mSent('wc4-s-paradox', 'Academic Context', '“The more you learn, the more you realize you don’t know” is a classic ', '.', 'Paradox', ['Synonym', 'Recipe', 'Shortcut'], 'A paradox sounds self-contradictory at first yet holds a deep truth!'),
+  mSent('wc4-s-conjecture', 'Academic Context', 'Without lab proof yet, the team called their bold hypothesis a ', '.', 'Conjecture', ['Certitude', 'Verdict', 'Fact'], 'A conjecture is an educated guess not yet fully proven!'),
+  mSent('wc4-s-catalyst', 'Academic Context', 'A single inspiring teacher can be the ', ' that sparks a lifelong love of science.', 'Catalyst', ['Barrier', 'Footnote', 'Detour'], 'A catalyst triggers big change or accelerates progress!'),
 ];
 
 function buildSpeakText(item, shuffledOptions) {
@@ -323,15 +345,30 @@ function buildSpeakText(item, shuffledOptions) {
   if (item.subkind === 'sentence') {
     return `Choose the word that fits best: ${item.sentenceBefore} blank ${item.sentenceAfter}. Choices: ${shuffledOptions.join(', ')}.`;
   }
-  return `Which word means: ${item.definition} Choices: ${shuffledOptions.join(', ')}.`;
+  return `${item.prompt} ${item.definition} Choices: ${shuffledOptions.join(', ')}.`;
 }
 
-export function generateSession(tier = 1) {
+export function generateSession(tier = 1, profile = null) {
   const bank = tier === 1 ? TIER1_ITEMS : tier === 2 ? TIER2_ITEMS : tier === 3 ? TIER3_ITEMS : TIER4_ITEMS;
-  return pickMany(bank, 5).map((item) => {
+  const scopeKey = `word-connections:${tier}`;
+  let chosen;
+
+  if (profile) {
+    chosen = selectSpacedWords(bank, profile, 5, (it) => `wc:${it.id}`);
+  } else {
+    const recent = getRecentPuzzleSigs(null, scopeKey);
+    const fresh = bank.filter((it) => !recent.includes(it.id));
+    const pool = fresh.length >= 5 ? fresh : bank;
+    chosen = shuffle(pool).slice(0, 5);
+    recordRecentPuzzleSigs(null, scopeKey, chosen.map((it) => it.id), 25);
+  }
+
+  return chosen.map((item) => {
+    const wordKey = `wc:${item.id}`;
     if (item.kind === 'ladder') {
       return {
         ...item,
+        wordKey,
         shuffledWords: shuffle(item.ordered),
         speakPrompt: buildSpeakText(item, []),
         strategyTip: item.tip,
@@ -340,6 +377,7 @@ export function generateSession(tier = 1) {
     const shuffledOptions = shuffle(item.options);
     return {
       ...item,
+      wordKey,
       shuffledOptions,
       speakPrompt: buildSpeakText(item, shuffledOptions),
       strategyTip: item.tip,
@@ -386,7 +424,7 @@ function renderChoiceCardBody(round) {
   }
 
   if (round.subkind === 'definition') {
-    return `<p class="word-sentence">“${round.definition}”</p>`;
+    return `<p class="word-sentence">${round.definition.startsWith('“') ? round.definition : `“${round.definition}”`}</p>`;
   }
 
   return `<p class="word-clue">${round.cardHint}</p>`;
@@ -452,6 +490,9 @@ export function renderRound(container, round, callbacks) {
           blank.textContent = opt;
           blank.classList.remove('blank');
           blank.classList.add('filled-answer');
+        }
+        if (callbacks.profile) {
+          recordWordAttempt(callbacks.profile, round.wordKey, !hadMistake);
         }
         callbacks.onCorrect(!hadMistake, buildSolvedMessage(round));
       } else {
@@ -537,6 +578,9 @@ function renderLadderRound(container, round, callbacks) {
       const isRight = round.ordered.every((w, i) => picked[i] === w);
       if (isRight) {
         solved = true;
+        if (callbacks.profile) {
+          recordWordAttempt(callbacks.profile, round.wordKey, !hadMistake);
+        }
         render();
         callbacks.onCorrect(
           !hadMistake,
