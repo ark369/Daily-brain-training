@@ -143,10 +143,28 @@ function renderScaleSvg(scale) {
   `;
 }
 
+const ALL_KINDS = ['star', 'gem', 'berry', 'leaf'];
+const recentBalanceMap = new Map();
+
+function getRecentSigs(scopeKey) {
+  if (!recentBalanceMap.has(scopeKey)) recentBalanceMap.set(scopeKey, []);
+  return recentBalanceMap.get(scopeKey);
+}
+
+function recordRecentSigs(scopeKey, sigs) {
+  const list = getRecentSigs(scopeKey);
+  for (const s of sigs) {
+    if (!list.includes(s)) list.push(s);
+  }
+  if (list.length > 30) {
+    list.splice(0, list.length - 30);
+  }
+}
+
 function makeCompareRound(tier) {
-  const kinds = shuffle(['star', 'gem', 'berry', 'leaf']).slice(0, 3);
+  const kinds = shuffle(ALL_KINDS).slice(0, 3);
   const [heaviest, middle, lightest] = kinds;
-  const askLightest = tier >= 2 && Math.random() < 0.4;
+  const askLightest = tier >= 2 ? Math.random() < 0.45 : Math.random() < 0.25;
 
   // Scale 1 compares heaviest vs middle; Scale 2 compares middle vs lightest
   const flip1 = Math.random() < 0.5;
@@ -167,6 +185,7 @@ function makeCompareRound(tier) {
 
   return {
     kind: 'compare',
+    signature: `cmp:${askLightest ? 'L' : 'H'}:${heaviest}-${middle}-${lightest}`,
     scales,
     options,
     answerKey: answerKind,
@@ -181,103 +200,262 @@ function makeCompareRound(tier) {
 }
 
 function makeMissingWeightRound(tier) {
-  const total = tier === 1 ? randInt(5, 10) : randInt(10, 18);
-  const known = randInt(2, total - 2);
-  const missing = total - known;
+  const total = tier === 1 ? randInt(5, 12) : randInt(10, 24);
+  const minKnown = tier === 1 ? 1 : 2;
+  let known = randInt(minKnown, total - minKnown);
+  let missing = total - known;
 
-  const left =
-    tier === 1
-      ? [{ type: 'num', value: total }]
-      : [
-          { type: 'num', value: Math.floor(total / 2) },
-          { type: 'num', value: total - Math.floor(total / 2) },
-        ];
-  const right = [{ type: 'num', value: known }, { type: 'mystery' }];
+  let fullPan;
+  if (tier === 1 && (total <= 7 || Math.random() < 0.55)) {
+    fullPan = [{ type: 'num', value: total }];
+  } else {
+    const minPart = tier === 1 ? 2 : 3;
+    let partA = randInt(minPart, total - minPart);
+    let partB = total - partA;
+    // Avoid trivial identity like [6, 5] vs [6, ?] so kids actually compute the sum
+    if (partA === known || partB === known) {
+      const alt = known + 1 <= total - minKnown ? known + 1 : known - 1;
+      if (alt >= minKnown && total - alt >= minKnown) {
+        known = alt;
+        missing = total - known;
+      }
+    }
+    fullPan = [
+      { type: 'num', value: partA },
+      { type: 'num', value: partB },
+    ];
+  }
+
+  const mysteryPan = Math.random() < 0.5
+    ? [{ type: 'num', value: known }, { type: 'mystery' }]
+    : [{ type: 'mystery' }, { type: 'num', value: known }];
+  const solvedMysteryPan = mysteryPan.map((it) =>
+    it.type === 'mystery' ? { type: 'num', value: missing } : it
+  );
+
+  const mysteryOnLeft = Math.random() < 0.5;
+  const left = mysteryOnLeft ? mysteryPan : fullPan;
+  const right = mysteryOnLeft ? fullPan : mysteryPan;
+  const solvedLeft = mysteryOnLeft ? solvedMysteryPan : fullPan;
+  const solvedRight = mysteryOnLeft ? fullPan : solvedMysteryPan;
+  const tilt = mysteryOnLeft ? 1 : -1;
+  const fullSide = mysteryOnLeft ? 'right' : 'left';
+  const mysterySide = mysteryOnLeft ? 'left' : 'right';
 
   return {
     kind: 'numeric',
-    scales: [{ left, right, tilt: -1 }],
-    solvedScale: { left, right: [{ type: 'num', value: known }, { type: 'num', value: missing }], tilt: 0 },
+    signature: `miss:${total}:${missing}:${fullPan.map((p) => p.value).join('+')}`,
+    scales: [{ left, right, tilt }],
+    solvedScale: { left: solvedLeft, right: solvedRight, tilt: 0 },
     choices: makeNumericChoices(missing, 4, 1, 4),
     answer: missing,
     prompt: 'Which weight balances both pans evenly?',
-    speakPrompt: `Make both sides equal! The left side totals ${total}. The right side has ${known} plus mystery weight. What number makes it balance?`,
-    strategyTip: `Find the total on the left side (${total}), then ask: ${known} plus what equals ${total}?`,
+    speakPrompt: `Make both sides equal! The ${fullSide} side totals ${total}. The ${mysterySide} side has ${known} plus mystery weight. What number makes it balance?`,
+    strategyTip: `Find the total on the ${fullSide} side (${total}), then ask: ${known} plus what equals ${total}?`,
   };
 }
 
-function makeVisualAlgebraRound() {
-  const shapeKind = pickOne(['star', 'gem', 'berry']);
+function makeEqualGroupRound(tier, preferredKind = null) {
+  const shapeKind = preferredKind || pickOne(ALL_KINDS);
   const info = WEIGHT_ITEMS[shapeKind];
-  const xVal = randInt(3, 9);
-  const count = pickOne([2, 3]);
-  const extra = randInt(2, 7);
-  const rightTotal = count * xVal + extra;
+  const count = tier === 1 ? 2 : pickOne([2, 3, 4]);
+  const xVal = tier === 1 ? randInt(2, 7) : randInt(2, 9);
+  const total = count * xVal;
 
-  const left = [
-    ...Array.from({ length: count }, () => ({ type: 'shape', kind: shapeKind })),
-    { type: 'num', value: extra },
-  ];
-  const right = [{ type: 'num', value: rightTotal }];
+  const shapePan = Array.from({ length: count }, () => ({ type: 'shape', kind: shapeKind }));
+  const numPan = [{ type: 'num', value: total }];
+  const flip = Math.random() < 0.5;
+  const left = flip ? numPan : shapePan;
+  const right = flip ? shapePan : numPan;
 
   return {
     kind: 'numeric',
+    signature: `eqgrp:${count}:${xVal}`,
     scales: [{ left, right, tilt: 0 }],
     choices: makeNumericChoices(xVal, 4, 1, 4),
     answer: xVal,
     prompt: `The scale is balanced! How much does 1 ${info.short} weigh?`,
-    speakPrompt: `The scale is balanced! There are ${count} ${info.short}s plus ${extra} on the left, balancing ${rightTotal} on the right. How much does 1 ${info.short} weigh?`,
-    strategyTip: `Take ${extra} off BOTH sides so it stays balanced! That leaves ${count} ${info.short}s = ${rightTotal - extra}, so 1 ${info.short} = ${(rightTotal - extra) / count}.`,
+    speakPrompt: `The scale is balanced! ${count} matching ${info.short}s balance ${total}. How much does 1 ${info.short} weigh?`,
+    strategyTip: `Share ${total} equally among the ${count} matching ${info.short}s: ${total} ÷ ${count} = ${xVal}!`,
   };
 }
 
-function makeTwoScaleSystemRound() {
-  const [kindA, kindB] = shuffle(['star', 'gem', 'berry', 'leaf']).slice(0, 2);
-  const infoA = WEIGHT_ITEMS[kindA];
-  const infoB = WEIGHT_ITEMS[kindB];
-  const valA = randInt(3, 8);
-  const valB = randInt(2, 9);
-  const countA = pickOne([2, 3]);
-  const countB = 2;
+function makeVisualAlgebraRound(tier = 3, preferredKind = null) {
+  const shapeKind = preferredKind || pickOne(ALL_KINDS);
+  const info = WEIGHT_ITEMS[shapeKind];
+  const xVal = tier >= 4 ? randInt(4, 12) : randInt(2, 10);
+  const count = pickOne([2, 3]);
+  const extra = tier >= 4 ? randInt(3, 15) : randInt(1, 9);
+  const rightTotal = count * xVal + extra;
 
-  const scale1 = {
-    left: Array.from({ length: countA }, () => ({ type: 'shape', kind: kindA })),
-    right: [{ type: 'num', value: countA * valA }],
-    tilt: 0,
-  };
-  const scale2 = {
-    left: [
-      { type: 'shape', kind: kindA },
-      ...Array.from({ length: countB }, () => ({ type: 'shape', kind: kindB })),
-    ],
-    right: [{ type: 'num', value: valA + countB * valB }],
-    tilt: 0,
-  };
+  const shapePan = [
+    ...Array.from({ length: count }, () => ({ type: 'shape', kind: shapeKind })),
+    { type: 'num', value: extra },
+  ];
+  const numPan = [{ type: 'num', value: rightTotal }];
+  const flip = Math.random() < 0.45;
+  const left = flip ? numPan : shapePan;
+  const right = flip ? shapePan : numPan;
 
   return {
     kind: 'numeric',
+    signature: `alg:${count}:${xVal}:${extra}`,
+    scales: [{ left, right, tilt: 0 }],
+    choices: makeNumericChoices(xVal, 4, 1, 4),
+    answer: xVal,
+    prompt: `The scale is balanced! How much does 1 ${info.short} weigh?`,
+    speakPrompt: `The scale is balanced! ${count} ${info.short}s plus ${extra} balance ${rightTotal}. How much does 1 ${info.short} weigh?`,
+    strategyTip: `Take ${extra} off BOTH sides so it stays balanced! That leaves ${count} ${info.short}s = ${rightTotal - extra}, so 1 ${info.short} = ${xVal}.`,
+  };
+}
+
+function makeCancelBothSidesRound(tier = 3, preferredKind = null) {
+  const shapeKind = preferredKind || pickOne(ALL_KINDS);
+  const info = WEIGHT_ITEMS[shapeKind];
+  const extraShapes = tier >= 4 ? pickOne([1, 2]) : Math.random() < 0.7 ? 1 : 2;
+  // Left side has (1 + extraShapes) shapes + smallNum; right side has 1 shape + bigNum
+  // Max items per pan = 1 + extraShapes + 1 <= 4
+  const xVal = tier >= 4 ? randInt(4, 12) : randInt(3, 10);
+  const smallNum = extraShapes === 2 && tier === 3 ? 0 : randInt(1, tier >= 4 ? 10 : 7);
+  const bigNum = smallNum + extraShapes * xVal;
+
+  const sideA = [
+    ...Array.from({ length: 1 + extraShapes }, () => ({ type: 'shape', kind: shapeKind })),
+    ...(smallNum > 0 ? [{ type: 'num', value: smallNum }] : []),
+  ];
+  const sideB = [{ type: 'shape', kind: shapeKind }, { type: 'num', value: bigNum }];
+
+  const flip = Math.random() < 0.45;
+  const left = flip ? sideB : sideA;
+  const right = flip ? sideA : sideB;
+
+  const numStep = smallNum > 0 ? ` and take ${smallNum} off BOTH sides` : '';
+  const finalStep =
+    extraShapes === 1
+      ? `That leaves 1 ${info.short} = ${xVal}!`
+      : `That leaves ${extraShapes} ${info.short}s = ${extraShapes * xVal}, so 1 ${info.short} = ${xVal}!`;
+
+  return {
+    kind: 'numeric',
+    signature: `cancel:${extraShapes}:${xVal}:${smallNum}`,
+    scales: [{ left, right, tilt: 0 }],
+    choices: makeNumericChoices(xVal, 4, 1, 4),
+    answer: xVal,
+    prompt: `The scale is balanced! How much does 1 ${info.short} weigh?`,
+    speakPrompt: `Both pans have ${info.short}s! Try removing one ${info.short} from each pan to see what is left. How much does 1 ${info.short} weigh?`,
+    strategyTip: `Remove 1 ${info.short} from BOTH pans${numStep}! ${finalStep}`,
+  };
+}
+
+function makeTwoScaleSystemRound(tier = 4) {
+  const [kindA, kindB] = shuffle(ALL_KINDS).slice(0, 2);
+  const infoA = WEIGHT_ITEMS[kindA];
+  const infoB = WEIGHT_ITEMS[kindB];
+  const valA = randInt(2, tier >= 4 ? 9 : 7);
+  const valB = randInt(2, tier >= 4 ? 10 : 8);
+  const countA = pickOne(tier >= 4 ? [2, 3, 4] : [2, 3]);
+  const countB = tier === 3 ? pickOne([1, 2]) : pickOne([1, 2, 3]);
+
+  const s1Shapes = Array.from({ length: countA }, () => ({ type: 'shape', kind: kindA }));
+  const s1Num = [{ type: 'num', value: countA * valA }];
+  const flip1 = Math.random() < 0.35;
+  const scale1 = {
+    left: flip1 ? s1Num : s1Shapes,
+    right: flip1 ? s1Shapes : s1Num,
+    tilt: 0,
+  };
+
+  const s2Shapes = [
+    { type: 'shape', kind: kindA },
+    ...Array.from({ length: countB }, () => ({ type: 'shape', kind: kindB })),
+  ];
+  const s2Total = valA + countB * valB;
+  const s2Num = [{ type: 'num', value: s2Total }];
+  const flip2 = Math.random() < 0.35;
+  const scale2 = {
+    left: flip2 ? s2Num : s2Shapes,
+    right: flip2 ? s2Shapes : s2Num,
+    tilt: 0,
+  };
+
+  const bStep =
+    countB === 1
+      ? `${s2Total} − ${valA} = ${valB}!`
+      : `${s2Total} − ${valA} = ${countB * valB}, then divide by ${countB} → ${valB}!`;
+
+  return {
+    kind: 'numeric',
+    signature: `sys:${countA}:${valA}:${countB}:${valB}`,
     scales: [scale1, scale2],
     choices: makeNumericChoices(valB, 4, 1, 4),
     answer: valB,
     prompt: `Both scales are balanced! How much does 1 ${infoB.short} weigh?`,
     speakPrompt: `Both scales are balanced. Use the top scale to find the ${infoA.short} first, then solve for 1 ${infoB.short}.`,
-    strategyTip: `From Scale 1: ${countA} ${infoA.short}s = ${countA * valA}, so 1 ${infoA.short} = ${valA}. Plug ${valA} into Scale 2 and subtract it from ${valA + countB * valB}!`,
+    strategyTip: `From Scale 1: ${countA} ${infoA.short}s = ${countA * valA}, so 1 ${infoA.short} = ${valA}. Plug ${valA} into Scale 2: ${bStep}`,
   };
 }
 
-export function generateSession(tier = 1) {
-  const rounds = [];
-  for (let i = 0; i < 5; i++) {
-    if (tier === 1) {
-      rounds.push(i % 2 === 0 ? makeMissingWeightRound(1) : makeCompareRound(1));
-    } else if (tier === 2) {
-      rounds.push(i % 2 === 0 ? makeCompareRound(2) : makeMissingWeightRound(2));
-    } else if (tier === 3) {
-      rounds.push(i === 1 ? makeCompareRound(3) : makeVisualAlgebraRound());
-    } else {
-      rounds.push(i % 2 === 0 ? makeTwoScaleSystemRound() : makeVisualAlgebraRound());
+function generateUniqueRound(makerFn, sessionSigs, recentSigs) {
+  let fallback = null;
+  for (let attempt = 0; attempt < 28; attempt++) {
+    const candidate = makerFn();
+    if (!sessionSigs.has(candidate.signature)) {
+      fallback = candidate;
+      if (!recentSigs.includes(candidate.signature)) {
+        return candidate;
+      }
     }
   }
+  return fallback || makerFn();
+}
+
+export function generateSession(tier = 1, profile = null) {
+  const scopeKey = `${profile?.id || 'anon'}:${tier}`;
+  const recentSigs = getRecentSigs(scopeKey);
+  const sessionSigs = new Set();
+  const shapeOrder = shuffle(ALL_KINDS);
+  let shapeCursor = 0;
+  const nextShape = () => shapeOrder[shapeCursor++ % shapeOrder.length];
+
+  const blueprints = {
+    1: [
+      () => makeMissingWeightRound(1),
+      () => makeCompareRound(1),
+      () => makeEqualGroupRound(1, nextShape()),
+      () => makeMissingWeightRound(1),
+      () => makeCompareRound(1),
+    ],
+    2: [
+      () => makeCompareRound(2),
+      () => makeMissingWeightRound(2),
+      () => makeEqualGroupRound(2, nextShape()),
+      () => makeMissingWeightRound(2),
+      () => makeCompareRound(2),
+    ],
+    3: [
+      () => makeVisualAlgebraRound(3, nextShape()),
+      () => makeCancelBothSidesRound(3, nextShape()),
+      () => makeCompareRound(3),
+      () => makeVisualAlgebraRound(3, nextShape()),
+      () => makeTwoScaleSystemRound(3),
+    ],
+    4: [
+      () => makeTwoScaleSystemRound(4),
+      () => makeCancelBothSidesRound(4, nextShape()),
+      () => makeVisualAlgebraRound(4, nextShape()),
+      () => makeTwoScaleSystemRound(4),
+      () => makeCancelBothSidesRound(4, nextShape()),
+    ],
+  };
+
+  const makers = blueprints[tier] || blueprints[4];
+  const rounds = makers.map((fn) => {
+    const r = generateUniqueRound(fn, sessionSigs, recentSigs);
+    sessionSigs.add(r.signature);
+    return r;
+  });
+
+  recordRecentSigs(scopeKey, Array.from(sessionSigs));
   return rounds;
 }
 

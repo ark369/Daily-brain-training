@@ -23,171 +23,303 @@ export const meta = {
   timed: true, // Tier 2–4 fluency phase uses calm 60s sprint unless Calm Mode is enabled
 };
 
-function buildWarmupItems(tier) {
-  if (tier === 1) {
-    // Making 10 & Doubles within 15 with Ten-Frame visual
-    const pairs = shuffle([
-      { a: 8, b: 4, tip: 'Fill the 10-frame! Take 2 from 4 to make 10, then add 2 more → 12.' },
-      { a: 7, b: 5, tip: 'Take 3 from 5 to fill the 10-frame (10), then add the 2 left → 12.' },
-      { a: 6, b: 6, tip: 'Doubles! 5 + 5 is 10, plus 2 more makes 12.' },
-      { a: 9, b: 4, tip: '9 only needs 1 to make 10! So 9 + 4 is the same as 10 + 3 = 13.' },
-      { a: 8, b: 3, tip: 'Take 2 from 3 to make 10, leaving 1 → 11.' },
-    ]).slice(0, 3);
+// Tracks recently shown warm-up and fluency facts per profile+tier so replays stay fresh
+const recentWarmupMap = new Map();
+const recentFluencyMap = new Map();
 
-    return pairs.map((p) => ({
-      phase: 'warmup',
-      factKey: `${p.a}+${p.b}`,
-      equation: `${p.a} + ${p.b} = ?`,
-      answer: p.a + p.b,
-      visual: { type: 'tenframe', a: p.a, b: p.b },
-      strategyTip: p.tip,
-    }));
+function getRecentSet(map, key) {
+  if (!map.has(key)) map.set(key, new Set());
+  return map.get(key);
+}
+
+function buildWarmupPool(tier) {
+  const pool = [];
+
+  if (tier === 1) {
+    // Procedural Make-10 (sums 11–17) & Doubles (4+4 through 9+9) with Ten-Frame visuals
+    for (let a = 6; a <= 9; a++) {
+      for (let b = 2; b <= a; b++) {
+        if (a + b >= 11 && a + b <= 17 && a !== b) {
+          const need = 10 - a;
+          const rem = b - need;
+          pool.push({
+            factKey: `${a}+${b}`,
+            equation: `${a} + ${b} = ?`,
+            answer: a + b,
+            visual: { type: 'tenframe', a, b },
+            strategyTip: `Fill the 10-frame! Take ${need} from ${b} to make 10, then add the ${rem} left → ${a + b}.`,
+          });
+        }
+      }
+    }
+    for (let d = 4; d <= 9; d++) {
+      const tip =
+        d <= 5
+          ? `Doubles! Two equal groups of ${d} make ${d + d}.`
+          : `Doubles! (5 + 5) makes 10, plus (${d - 5} + ${d - 5}) makes ${d + d}!`;
+      pool.push({
+        factKey: `${d}+${d}`,
+        equation: `${d} + ${d} = ?`,
+        answer: d + d,
+        visual: { type: 'tenframe', a: d, b: d },
+        strategyTip: tip,
+      });
+    }
+    return pool;
   }
 
   if (tier === 2) {
-    const items = shuffle([
-      { a: 6, b: 4, splitA: 5, splitB: 1, tip: 'Split 6 × 4 into (5 × 4) + (1 × 4) = 20 + 4 = 24!' },
-      { a: 7, b: 3, splitA: 5, splitB: 2, tip: 'Split 7 × 3 into (5 × 3) + (2 × 3) = 15 + 6 = 21!' },
-      { a: 6, b: 3, splitA: 5, splitB: 1, tip: 'Split 6 × 3 into (5 × 3) + (1 × 3) = 15 + 3 = 18!' },
-      { a: 4, b: 6, splitA: 2, splitB: 2, tip: 'Double-double! 2 × 6 = 12, then double it to get 24!' },
-    ]).slice(0, 3);
-
-    return items.map((p) => ({
-      phase: 'warmup',
-      factKey: `${p.a}x${p.b}`,
-      equation: `${p.a} × ${p.b} = ?`,
-      answer: p.a * p.b,
-      visual: { type: 'splitarray', rows: p.b, colsA: p.splitA, colsB: p.splitB },
-      strategyTip: p.tip,
-    }));
+    // Procedural Split-Array multiplication warm-ups (2s–6s × 4, 6, 7, 8, 9)
+    const splits = [
+      { cols: 4, splitA: 2, splitB: 2, makeTip: (r) => `Double-double! (2 × ${r}) = ${2 * r}, double it → ${4 * r}!` },
+      { cols: 6, splitA: 5, splitB: 1, makeTip: (r) => `Split 6 × ${r} into (5 × ${r}) + (1 × ${r}) = ${5 * r} + ${r} = ${6 * r}!` },
+      { cols: 7, splitA: 5, splitB: 2, makeTip: (r) => `Split 7 × ${r} into (5 × ${r}) + (2 × ${r}) = ${5 * r} + ${2 * r} = ${7 * r}!` },
+      { cols: 8, splitA: 5, splitB: 3, makeTip: (r) => `Split 8 × ${r} into (5 × ${r}) + (3 × ${r}) = ${5 * r} + ${3 * r} = ${8 * r}!` },
+      { cols: 9, splitA: 5, splitB: 4, makeTip: (r) => `Think (10 × ${r}) − ${r} = ${10 * r} − ${r} = ${9 * r}, or (5 × ${r}) + (4 × ${r})!` },
+    ];
+    for (let rows = 2; rows <= 6; rows++) {
+      for (const s of splits) {
+        if (s.cols * rows > 54) continue;
+        pool.push({
+          factKey: `${s.cols}x${rows}`,
+          equation: `${s.cols} × ${rows} = ?`,
+          answer: s.cols * rows,
+          visual: { type: 'splitarray', rows, colsA: s.splitA, colsB: s.splitB },
+          strategyTip: s.makeTip(rows),
+        });
+      }
+    }
+    return pool;
   }
 
   if (tier === 3) {
-    // Hardest multiplication pairs (4s–9s) with distributive split-area visual
-    const items = shuffle([
-      { a: 7, b: 6, splitA: 5, splitB: 2, tip: 'Split 7 × 6 into (5 × 6) + (2 × 6) = 30 + 12 = 42!' },
-      { a: 8, b: 7, splitA: 5, splitB: 3, tip: 'Split 8 × 7 into (5 × 7) + (3 × 7) = 35 + 21 = 56!' },
-      { a: 9, b: 6, splitA: 5, splitB: 4, tip: 'Think (10 × 6) − 6 = 60 − 6 = 54, or (5 × 6) + (4 × 6)!' },
-      { a: 7, b: 4, splitA: 5, splitB: 2, tip: 'Split 7 × 4 into (5 × 4) + (2 × 4) = 20 + 8 = 28!' },
-      { a: 8, b: 6, splitA: 5, splitB: 3, tip: 'Split 8 × 6 into (5 × 6) + (3 × 6) = 30 + 18 = 48!' },
-    ]).slice(0, 3);
-
-    return items.map((p) => ({
-      phase: 'warmup',
-      factKey: `${p.a}x${p.b}`,
-      equation: `${p.a} × ${p.b} = ?`,
-      answer: p.a * p.b,
-      visual: { type: 'splitarray', rows: p.b, colsA: p.splitA, colsB: p.splitB },
-      strategyTip: p.tip,
-    }));
+    // Procedural Split-Area multiplication warm-ups across hard pairs (4–9 × 4–9)
+    const splits = [
+      { cols: 4, splitA: 2, splitB: 2, makeTip: (r) => `Double-double! 2 × ${r} = ${2 * r}, then double again → ${4 * r}!` },
+      { cols: 6, splitA: 5, splitB: 1, makeTip: (r) => `Split 6 × ${r} into (5 × ${r}) + (1 × ${r}) = ${5 * r} + ${r} = ${6 * r}!` },
+      { cols: 7, splitA: 5, splitB: 2, makeTip: (r) => `Split 7 × ${r} into (5 × ${r}) + (2 × ${r}) = ${5 * r} + ${2 * r} = ${7 * r}!` },
+      { cols: 8, splitA: 5, splitB: 3, makeTip: (r) => `Split 8 × ${r} into (5 × ${r}) + (3 × ${r}) = ${5 * r} + ${3 * r} = ${8 * r}!` },
+      { cols: 9, splitA: 5, splitB: 4, makeTip: (r) => `Think (10 × ${r}) − ${r} = ${10 * r} − ${r} = ${9 * r}, or (5 × ${r}) + (4 × ${r})!` },
+    ];
+    for (let rows = 4; rows <= 9; rows++) {
+      for (const s of splits) {
+        if (s.cols === 4 && rows < 6) continue;
+        pool.push({
+          factKey: `${s.cols}x${rows}`,
+          equation: `${s.cols} × ${rows} = ?`,
+          answer: s.cols * rows,
+          visual: { type: 'splitarray', rows, colsA: s.splitA, colsB: s.splitB },
+          strategyTip: s.makeTip(rows),
+        });
+      }
+    }
+    return pool;
   }
 
-  // Tier 4: Mental decomposition strategies
-  const items = shuffle([
-    { eq: '14 × 6 = ?', ans: 84, key: '14x6', tip: 'Split 14 into 10 + 4: (10 × 6) + (4 × 6) = 60 + 24 = 84.' },
-    { eq: '16 × 5 = ?', ans: 80, key: '16x5', tip: 'Half of 16 is 8, times 10 is 80!' },
-    { eq: '99 + 47 = ?', ans: 146, key: '99+47', tip: 'Add 100 to 47 (147), then subtract 1 → 146!' },
-    { eq: '12 × 8 = ?', ans: 96, key: '12x8', tip: 'Split 12 into 10 + 2: (10 × 8) + (2 × 8) = 80 + 16 = 96.' },
-  ]).slice(0, 3);
-
-  return items.map((p) => ({
-    phase: 'warmup',
-    factKey: p.key,
-    equation: p.eq,
-    answer: p.ans,
-    visual: { type: 'text', label: p.tip.split(':')[0] },
-    strategyTip: p.tip,
-  }));
-}
-
-function buildFactPool(tier) {
-  const pool = [];
-  if (tier === 1) {
-    // Addition & gentle subtraction within 10–14
-    for (let a = 1; a <= 9; a++) {
-      for (let b = 1; b <= 9; b++) {
-        if (a + b <= 12) {
-          pool.push({ factKey: `${a}+${b}`, equation: `${a} + ${b} = ?`, answer: a + b, a, b, op: '+' });
-        }
-      }
+  // Tier 4: Procedural mental decomposition across 4 real strategies (~40 items)
+  for (const a of [12, 13, 14, 15, 16, 17, 18, 19]) {
+    for (const b of [4, 6, 7, 8]) {
+      const ones = a - 10;
+      pool.push({
+        factKey: `${a}x${b}`,
+        equation: `${a} × ${b} = ?`,
+        answer: a * b,
+        visual: { type: 'text', label: `Split ${a} into 10 + ${ones}` },
+        strategyTip: `Split ${a} into 10 + ${ones}: (10 × ${b}) + (${ones} × ${b}) = ${10 * b} + ${ones * b} = ${a * b}.`,
+      });
     }
-    for (let a = 5; a <= 10; a++) {
-      for (let b = 1; b <= 4; b++) {
-        pool.push({ factKey: `${a}-${b}`, equation: `${a} − ${b} = ?`, answer: a - b, a, b, op: '-' });
-      }
-    }
-  } else if (tier === 2) {
-    // Add/sub within 20 + foundational multiplication (2, 3, 4, 5, 10)
-    for (let a = 6; a <= 9; a++) {
-      for (let b = 4; b <= 9; b++) {
-        pool.push({ factKey: `${a}+${b}`, equation: `${a} + ${b} = ?`, answer: a + b, a, b, op: '+' });
-        pool.push({ factKey: `${a + b}-${a}`, equation: `${a + b} − ${a} = ?`, answer: b, a: a + b, b: a, op: '-' });
-      }
-    }
-    for (const m of [2, 3, 4, 5, 10]) {
-      for (let k = 2; k <= 9; k++) {
-        pool.push({ factKey: `${m}x${k}`, equation: `${m} × ${k} = ?`, answer: m * k, a: m, b: k, op: 'x' });
-      }
-    }
-  } else if (tier === 3) {
-    // Full multiplication & division, weighting the research-identified hard pairs (4–9)
-    for (let a = 3; a <= 9; a++) {
-      for (let b = 4; b <= 9; b++) {
-        pool.push({ factKey: `${a}x${b}`, equation: `${a} × ${b} = ?`, answer: a * b, a, b, op: 'x' });
-        if (a >= 4 && b >= 4) {
-          // Double weight for 4s–9s hard pairs (Burns et al., 2015)
-          pool.push({ factKey: `${a}x${b}`, equation: `${a} × ${b} = ?`, answer: a * b, a, b, op: 'x' });
-        }
-        pool.push({ factKey: `${a * b}/${a}`, equation: `${a * b} ÷ ${a} = ?`, answer: b, a: a * b, b: a, op: '/' });
-      }
-    }
-  } else {
-    // Tier 4: Extended multiplication (up to 12x12), division, and mental arithmetic
-    for (let a = 6; a <= 12; a++) {
-      for (let b = 4; b <= 12; b++) {
-        pool.push({ factKey: `${a}x${b}`, equation: `${a} × ${b} = ?`, answer: a * b, a, b, op: 'x' });
-        pool.push({ factKey: `${a * b}/${a}`, equation: `${a * b} ÷ ${a} = ?`, answer: b, a: a * b, b: a, op: '/' });
-      }
-    }
-    for (let i = 0; i < 16; i++) {
-      const a = randInt(25, 89);
-      const b = pickOne([9, 11, 15, 19, 25]);
-      pool.push({ factKey: `${a}+${b}`, equation: `${a} + ${b} = ?`, answer: a + b, a, b, op: '+' });
-    }
+  }
+  for (const even of [14, 16, 18, 22, 24, 26, 28, 34]) {
+    pool.push({
+      factKey: `${even}x5`,
+      equation: `${even} × 5 = ?`,
+      answer: even * 5,
+      visual: { type: 'text', label: `Half of ${even}, then × 10` },
+      strategyTip: `Half of ${even} is ${even / 2}; times 10 is ${even * 5}!`,
+    });
+  }
+  for (const [base, adj, add] of [
+    [99, 1, 37],
+    [99, 1, 48],
+    [99, 1, 64],
+    [98, 2, 45],
+    [98, 2, 57],
+    [49, 1, 36],
+    [49, 1, 58],
+    [199, 1, 43],
+  ]) {
+    const rounded = base + adj;
+    pool.push({
+      factKey: `${base}+${add}`,
+      equation: `${base} + ${add} = ?`,
+      answer: base + add,
+      visual: { type: 'text', label: `Add ${rounded}, then − ${adj}` },
+      strategyTip: `Add ${rounded} + ${add} = ${rounded + add}, then subtract ${adj} → ${base + add}!`,
+    });
   }
   return pool;
 }
 
-function selectFluencyQueue(tier, profile, count = 35) {
-  const pool = buildFactPool(tier);
-  const byKey = new Map();
-  pool.forEach((f) => byKey.set(f.factKey, f));
+function selectWarmupItems(tier, profile) {
+  const pool = buildWarmupPool(tier);
+  const scopeKey = `${profile?.id || 'anon'}:${tier}`;
+  const recent = getRecentSet(recentWarmupMap, scopeKey);
 
-  const queue = [];
-  // Surface kid's previously missed or hesitant (>3.2s) facts first!
+  let candidates = pool.filter((item) => !recent.has(item.factKey));
+  if (candidates.length < 3) {
+    recent.clear();
+    candidates = pool;
+  }
+
+  const chosen = shuffle(candidates).slice(0, 3);
+  chosen.forEach((c) => recent.add(c.factKey));
+  if (recent.size > Math.max(9, pool.length - 4)) {
+    recent.clear();
+    chosen.forEach((c) => recent.add(c.factKey));
+  }
+
+  return chosen.map((p) => ({ ...p, phase: 'warmup' }));
+}
+
+function buildFactPool(tier) {
+  const map = new Map();
+  const add = (item) => {
+    if (!map.has(item.factKey)) map.set(item.factKey, item);
+  };
+
+  if (tier === 1) {
+    // Addition within 14 & gentle subtraction within 12 (~85 unique facts)
+    for (let a = 1; a <= 9; a++) {
+      for (let b = 1; b <= 9; b++) {
+        if (a + b <= 14) {
+          add({ factKey: `${a}+${b}`, equation: `${a} + ${b} = ?`, answer: a + b, a, b, op: '+' });
+        }
+      }
+    }
+    for (let a = 4; a <= 12; a++) {
+      for (let b = 1; b <= Math.min(5, a - 1); b++) {
+        add({ factKey: `${a}-${b}`, equation: `${a} − ${b} = ?`, answer: a - b, a, b, op: '-' });
+      }
+    }
+  } else if (tier === 2) {
+    // Add/sub within 20 + foundational multiplication (2, 3, 4, 5, 10) (~96 unique facts)
+    for (let a = 5; a <= 9; a++) {
+      for (let b = 3; b <= 9; b++) {
+        add({ factKey: `${a}+${b}`, equation: `${a} + ${b} = ?`, answer: a + b, a, b, op: '+' });
+        add({ factKey: `${a + b}-${a}`, equation: `${a + b} − ${a} = ?`, answer: b, a: a + b, b: a, op: '-' });
+      }
+    }
+    for (const m of [2, 3, 4, 5, 10]) {
+      for (let k = 2; k <= 9; k++) {
+        add({ factKey: `${m}x${k}`, equation: `${m} × ${k} = ?`, answer: m * k, a: m, b: k, op: 'x' });
+      }
+    }
+  } else if (tier === 3) {
+    // Full multiplication & division; tag research-identified hard pairs (4–9 × 4–9) without duplicating keys
+    for (let a = 3; a <= 9; a++) {
+      for (let b = 3; b <= 9; b++) {
+        if (a === 3 && b === 3) continue;
+        add({
+          factKey: `${a}x${b}`,
+          equation: `${a} × ${b} = ?`,
+          answer: a * b,
+          a,
+          b,
+          op: 'x',
+          isHardPair: a >= 4 && b >= 4,
+        });
+        add({
+          factKey: `${a * b}/${a}`,
+          equation: `${a * b} ÷ ${a} = ?`,
+          answer: b,
+          a: a * b,
+          b: a,
+          op: '/',
+          isHardPair: false,
+        });
+      }
+    }
+  } else {
+    // Tier 4: Extended multiplication (up to 12x12), division, and mental arithmetic (~140 unique facts)
+    for (let a = 6; a <= 12; a++) {
+      for (let b = 4; b <= 12; b++) {
+        add({ factKey: `${a}x${b}`, equation: `${a} × ${b} = ?`, answer: a * b, a, b, op: 'x' });
+        add({ factKey: `${a * b}/${a}`, equation: `${a * b} ÷ ${a} = ?`, answer: b, a: a * b, b: a, op: '/' });
+      }
+    }
+    for (let i = 0; i < 24; i++) {
+      const a = randInt(24, 89);
+      const b = pickOne([9, 11, 15, 19, 25]);
+      add({ factKey: `${a}+${b}`, equation: `${a} + ${b} = ?`, answer: a + b, a, b, op: '+' });
+    }
+  }
+  return Array.from(map.values());
+}
+
+function selectFluencyQueue(tier, profile, warmupKeys = new Set(), count = 60) {
+  const pool = buildFactPool(tier);
+  const byKey = new Map(pool.map((f) => [f.factKey, f]));
+  const scopeKey = `${profile?.id || 'anon'}:${tier}`;
+  const recent = getRecentSet(recentFluencyMap, scopeKey);
+
+  // 1. Gather up to 5 genuinely tricky facts (missed or hesitant >3.2s), skipping ones just done in warm-up
+  const trickyItems = [];
+  const usedKeys = new Set();
   if (profile) {
     const tricky = getTrickyFacts(profile, 8);
     for (const tf of tricky) {
-      if (byKey.has(tf.key)) {
-        queue.push(byKey.get(tf.key));
+      if (trickyItems.length >= 5) break;
+      if (byKey.has(tf.key) && !warmupKeys.has(tf.key) && !usedKeys.has(tf.key)) {
+        trickyItems.push(byKey.get(tf.key));
+        usedKeys.add(tf.key);
       }
     }
   }
 
-  const shuffled = shuffle(pool);
-  for (const item of shuffled) {
-    if (queue.length >= count) break;
-    // Avoid immediate duplicate back-to-back
-    if (queue.length === 0 || queue[queue.length - 1].factKey !== item.factKey) {
-      queue.push(item);
-    }
+  // 2. Partition remaining pool into fresh (not recently seen) vs earlier-seen so replays feel brand-new
+  const remaining = pool.filter((item) => !usedKeys.has(item.factKey) && !warmupKeys.has(item.factKey));
+  let fresh = remaining.filter((item) => !recent.has(item.factKey));
+  let older = remaining.filter((item) => recent.has(item.factKey));
+  if (fresh.length < 18) {
+    recent.clear();
+    fresh = remaining;
+    older = [];
   }
+
+  // In Tier 3, weight research-identified hard pairs (4–9 × 4–9) ~65% without any duplicates
+  const orderBucket = (bucket) => {
+    if (tier !== 3) return shuffle(bucket);
+    const hard = shuffle(bucket.filter((f) => f.isHardPair));
+    const other = shuffle(bucket.filter((f) => !f.isHardPair));
+    const mixed = [];
+    let hi = 0;
+    let oi = 0;
+    while (hi < hard.length || oi < other.length) {
+      if (hi < hard.length) mixed.push(hard[hi++]);
+      if (hi < hard.length) mixed.push(hard[hi++]);
+      if (oi < other.length) mixed.push(other[oi++]);
+    }
+    return mixed;
+  };
+
+  const baseOrder = [...orderBucket(fresh), ...orderBucket(older)];
+  const targetLen = Math.min(count, baseOrder.length + trickyItems.length);
+  const queue = baseOrder.slice(0, Math.max(0, targetLen - trickyItems.length));
+
+  // 3. Interleave genuinely tricky facts at spaced positions (#2, #6, #10, #14, #18) instead of clumping at #0
+  const spacedSlots = [2, 6, 10, 14, 18];
+  trickyItems.forEach((item, idx) => {
+    const pos = Math.min(queue.length, spacedSlots[idx] ?? queue.length);
+    queue.splice(pos, 0, item);
+  });
+
   return queue;
 }
 
 export function generateSession(tier = 1, profile = null) {
-  const warmups = buildWarmupItems(tier);
-  const fluencyQueue = selectFluencyQueue(tier, profile, 36);
+  const warmups = selectWarmupItems(tier, profile);
+  const warmupKeys = new Set(warmups.map((w) => w.factKey));
+  const fluencyQueue = selectFluencyQueue(tier, profile, warmupKeys, 60);
   const useTimedSprint = tier >= 2 && !(profile && profile.calmMode);
   const prevBest = profile?.gameStats?.[meta.id]?.bestScore || 0;
 
@@ -195,6 +327,7 @@ export function generateSession(tier = 1, profile = null) {
     {
       kind: 'fact-studio-flow',
       tier,
+      scopeKey: `${profile?.id || 'anon'}:${tier}`,
       warmups,
       fluencyQueue,
       useTimedSprint,
@@ -350,10 +483,6 @@ export function renderRound(container, round, callbacks) {
       btn.className = 'choice-btn';
       btn.textContent = String(val);
       btn.addEventListener('click', () => {
-        const elapsed = performance.now() - itemStartTs;
-        if (callbacks.profile) {
-          recordFactAttempt(callbacks.profile, item.factKey, val === item.answer, elapsed);
-        }
         if (val === item.answer) {
           callbacks.playCorrect();
           btn.classList.add('is-correct');
@@ -476,6 +605,9 @@ export function renderRound(container, round, callbacks) {
 
     function showCurrentFact() {
       const f = currentFact();
+      if (round.scopeKey && f && f.factKey) {
+        getRecentSet(recentFluencyMap, round.scopeKey).add(f.factKey);
+      }
       typedVal = '';
       itemStartTs = performance.now();
       eqEl.textContent = f.equation;

@@ -255,31 +255,45 @@ export function recordGameResult(state, profileId, {
 
 /**
  * Spaced-retrieval fact scheduler (Leitner-inspired + latency tracking).
- * Facts missed or solved hesitantly (>3000ms) drop to box 1 so they resurface sooner.
+ * - Box 1: Missed fact (needs 2 consecutive fast, accurate recalls to graduate).
+ * - Box 2: Hesitant (>3200ms) or 1 fast recall after a miss (needs 1 more fast recall).
+ * - Box 3–5: Smooth & automatic (graduated out of the tricky queue).
+ * Brand-new facts answered accurately AND smoothly (<=3200ms) start at Box 3 so
+ * already-known facts do not repeat immediately on the next session.
  */
 export function recordFactAttempt(profile, factKey, isCorrect, elapsedMs, todayKey = getTodayKey()) {
   if (!profile.factHistory) profile.factHistory = {};
-  const rec = profile.factHistory[factKey] || {
-    box: 1,
-    attempts: 0,
-    misses: 0,
-    lastMs: elapsedMs,
-    avgMs: elapsedMs,
-    lastSeenDay: todayKey,
-  };
+  const existing = profile.factHistory[factKey];
+  const isFast = elapsedMs <= 3200;
 
+  if (!existing) {
+    profile.factHistory[factKey] = {
+      box: !isCorrect ? 1 : isFast ? 3 : 2,
+      attempts: 1,
+      misses: isCorrect ? 0 : 1,
+      lastMs: Math.round(elapsedMs),
+      avgMs: Math.round(elapsedMs),
+      lastSeenDay: todayKey,
+      lastSeenAt: Date.now(),
+    };
+    return;
+  }
+
+  const rec = { ...existing };
   rec.attempts += 1;
   rec.lastMs = Math.round(elapsedMs);
   rec.avgMs = Math.round((rec.avgMs * (rec.attempts - 1) + elapsedMs) / rec.attempts);
   rec.lastSeenDay = todayKey;
+  rec.lastSeenAt = Date.now();
 
   if (!isCorrect) {
     rec.misses += 1;
     rec.box = 1;
-  } else if (elapsedMs > 3200) {
-    // Accurate but hesitant — keep practicing for smooth retrieval
+  } else if (!isFast) {
+    // Accurate but hesitant — hold at box 2 (or box 1 if still recovering from a miss)
     rec.box = Math.min(rec.box, 2);
   } else {
+    // Accurate and smooth — climb 1 -> 2 -> 3 (graduated) -> 4 -> 5
     rec.box = Math.min(5, rec.box + 1);
   }
 
@@ -289,10 +303,18 @@ export function recordFactAttempt(profile, factKey, isCorrect, elapsedMs, todayK
 export function getTrickyFacts(profile, limit = 8) {
   const entries = Object.entries(profile.factHistory || {});
   return entries
-    .filter(([, rec]) => rec.box <= 2 || rec.misses > 0 || rec.avgMs > 3200)
+    .filter(([, rec]) => {
+      if (rec.box <= 1) return true;
+      if (rec.box === 2) {
+        // Auto-heal legacy records where a 1-attempt fast accurate fact landed at box 2
+        if (rec.misses === 0 && rec.lastMs <= 3200 && rec.attempts <= 1) return false;
+        return true;
+      }
+      return false;
+    })
     .sort((a, b) => {
       if (a[1].box !== b[1].box) return a[1].box - b[1].box;
-      return b[1].avgMs - a[1].avgMs;
+      return b[1].lastMs - a[1].lastMs;
     })
     .slice(0, limit)
     .map(([key, rec]) => ({ key, ...rec }));

@@ -105,12 +105,21 @@ for (const game of GAMES) {
 
           if (game.meta.id === 'fact-studio') {
             assert.equal(r.warmups.length, 3);
-            assert.ok(r.fluencyQueue.length >= 20);
+            assert.ok(r.fluencyQueue.length >= 50, `Expected >=50 unique fluency items, got ${r.fluencyQueue.length}`);
             if (tier === 1) {
               assert.equal(r.useTimedSprint, false, 'Tier 1 must NEVER use timed sprint');
             }
+            const warmupKeys = new Set(r.warmups.map((w) => w.factKey));
+            assert.equal(warmupKeys.size, 3, 'Warm-ups must have 3 unique factKeys');
+            const fluencyKeys = new Set(r.fluencyQueue.map((f) => f.factKey));
+            assert.equal(
+              fluencyKeys.size,
+              r.fluencyQueue.length,
+              'Fluency queue must NOT contain duplicate factKeys within a session'
+            );
             for (const w of r.warmups) {
               assert.ok(Number.isFinite(w.answer));
+              assert.ok(!fluencyKeys.has(w.factKey), `Warm-up ${w.factKey} must not immediately repeat in sprint`);
             }
             for (const f of r.fluencyQueue) {
               assert.ok(Number.isFinite(f.answer));
@@ -119,6 +128,11 @@ for (const game of GAMES) {
 
           if (game.meta.id === 'balance-lab') {
             assert.ok(r.scales.length >= 1);
+            assert.ok(typeof r.signature === 'string' && r.signature.length > 0, 'Balance Lab round needs signature');
+            for (const sc of r.scales) {
+              assert.ok(sc.left.length >= 1 && sc.left.length <= 4, `Left pan overflow: ${sc.left.length}`);
+              assert.ok(sc.right.length >= 1 && sc.right.length <= 4, `Right pan overflow: ${sc.right.length}`);
+            }
             if (r.kind === 'numeric') {
               assert.equal(new Set(r.choices).size, 4);
               assert.ok(r.choices.includes(r.answer));
@@ -173,25 +187,45 @@ for (const game of GAMES) {
             }
           }
         }
+
+        if (game.meta.id === 'balance-lab') {
+          const sigs = new Set(rounds.map((r) => r.signature));
+          assert.equal(sigs.size, rounds.length, 'Balance Lab must never repeat a puzzle inside a session');
+        }
       }
     });
   }
 }
 
-// 4. Verify Spaced-Retrieval Fact Priority & Daily Star Recording
-check('Spaced-retrieval prioritizes missed & hesitant facts and daily completion awards star', () => {
+// 4. Verify Spaced-Retrieval Fact Priority, Fast-First-Try Non-Repetition & Graduation
+check('Spaced-retrieval prioritizes missed/hesitant facts, ignores fast first-try, and graduates cleanly', () => {
   const st = loadState();
   const kid = st.profiles[1]; // Explorer (Tier 2)
+
+  // Fast first-try correct answer must NOT enter tricky queue!
+  recordFactAttempt(kid, '2x6', true, 1300, '2026-11-24');
+  assert.equal(kid.factHistory['2x6'].box, 3, 'Fast first-try correct fact should start at box 3');
+  assert.ok(!getTrickyFacts(kid, 8).some((t) => t.key === '2x6'), 'Fast first-try fact must not be tricky');
+
+  // Legacy saved record auto-healing (old bug left 1-attempt fast facts at box 2)
+  kid.factHistory['4x3'] = { box: 2, attempts: 1, misses: 0, lastMs: 1100, avgMs: 1100, lastSeenDay: '2026-11-24' };
+  assert.ok(!getTrickyFacts(kid, 8).some((t) => t.key === '4x3'), 'Legacy 1-attempt fast fact should auto-heal');
+
+  // Missed & hesitant facts DO enter tricky queue
   recordFactAttempt(kid, '7x6', false, 5200, '2026-11-24');
   recordFactAttempt(kid, '3x4', true, 1200, '2026-11-24');
-  recordFactAttempt(kid, '3x4', true, 1100, '2026-11-24');
-  recordFactAttempt(kid, '3x4', true, 1050, '2026-11-24');
   recordFactAttempt(kid, '5x8', true, 4500, '2026-11-24');
 
   const tricky = getTrickyFacts(kid, 5);
   assert.equal(tricky[0].key, '7x6', 'Missed fact should rank first in spaced queue');
   assert.ok(tricky.some((t) => t.key === '5x8'), 'Hesitant (>3.2s) fact should appear in queue');
-  assert.ok(!tricky.some((t) => t.key === '3x4'), 'Fast mastered fact should graduate out of tricky queue');
+  assert.ok(!tricky.some((t) => t.key === '3x4'), 'Fast mastered fact should stay out of tricky queue');
+
+  // Missed fact graduates cleanly after 2 consecutive smooth recalls (even with lifetime misses === 1!)
+  recordFactAttempt(kid, '7x6', true, 1700, '2026-11-25');
+  assert.ok(getTrickyFacts(kid, 8).some((t) => t.key === '7x6'), 'After 1 smooth recall, confirm once more (box 2)');
+  recordFactAttempt(kid, '7x6', true, 1500, '2026-11-25');
+  assert.ok(!getTrickyFacts(kid, 8).some((t) => t.key === '7x6'), 'After 2 smooth recalls, missed fact must graduate!');
 
   // Completing all 4 daily games awards today's calendar star
   const today = '2026-11-24';
@@ -214,6 +248,27 @@ check('Spaced-retrieval prioritizes missed & hesitant facts and daily completion
 
   const cal = getMonthCalendarData(kid.completedDates, new Date(2026, 10, 24));
   assert.equal(cal.starsThisMonth, 1);
+});
+
+// 4b. Verify back-to-back replay freshness for Fact Studio & Balance Lab
+check('Back-to-back replays of Fact Studio warm-ups and Balance Lab avoid repeats', () => {
+  const factMod = GAMES.find((g) => g.meta.id === 'fact-studio');
+  const balMod = GAMES.find((g) => g.meta.id === 'balance-lab');
+  const freshProfile = { id: 'replay-test-kid', calmMode: false, factHistory: {}, gameStats: {} };
+
+  for (let tier = 1; tier <= 4; tier++) {
+    const f1 = factMod.generateSession(tier, freshProfile)[0];
+    const f2 = factMod.generateSession(tier, freshProfile)[0];
+    const w1 = new Set(f1.warmups.map((w) => w.factKey));
+    const overlapW = f2.warmups.filter((w) => w1.has(w.factKey));
+    assert.equal(overlapW.length, 0, `Fact Studio Tier ${tier} back-to-back warm-ups should not repeat`);
+
+    const b1 = balMod.generateSession(tier, freshProfile);
+    const b2 = balMod.generateSession(tier, freshProfile);
+    const s1 = new Set(b1.map((r) => r.signature));
+    const overlapB = b2.filter((r) => s1.has(r.signature));
+    assert.equal(overlapB.length, 0, `Balance Lab Tier ${tier} back-to-back sessions should not repeat`);
+  }
 });
 
 // 5. Verify EVERY shape in CHIRAL_SHAPES is orthogonally connected and strictly chiral
