@@ -1041,6 +1041,130 @@ select:focus-visible {
   color: var(--ink-muted);
 }
 
+/* Studio Shelf (Calm Cumulative Keepsakes) */
+.shelf-card {
+  padding: var(--space-5) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.shelf-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.shelf-title {
+  font-size: 1.18rem;
+}
+
+.shelf-sub {
+  font-size: 0.86rem;
+  color: var(--ink-secondary);
+  margin-top: 2px;
+}
+
+.shelf-ledge {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(74px, 1fr));
+  gap: 10px;
+  padding: 12px;
+  background: var(--surface-subtle);
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--border-soft);
+  border-bottom: 5px solid #D4C4AE;
+}
+
+.shelf-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+  border-radius: 12px;
+  background: var(--surface-card);
+  border: 1.5px solid var(--border-soft);
+  text-align: center;
+}
+
+.shelf-item.unlocked {
+  border-color: var(--analyze-mid);
+  box-shadow: 0 2px 0 var(--border-soft);
+}
+
+.shelf-item.locked .shelf-item-art {
+  opacity: 0.22;
+  filter: grayscale(1);
+}
+
+.shelf-item-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--ink-secondary);
+  line-height: 1.15;
+}
+
+.shelf-item.locked .shelf-item-label {
+  color: var(--ink-muted);
+}
+
+.stage-pill {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  background: #2A354B;
+  color: #FFE8A3;
+  letter-spacing: 0.03em;
+}
+
+.shelf-unlock-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 18px;
+  border-radius: var(--radius-md);
+  background: var(--analyze-soft);
+  border: 2px solid var(--analyze);
+  color: var(--warm-hint-ink);
+}
+
+.tier-nudge-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: var(--success-soft);
+  border: 1.5px solid var(--success);
+  color: var(--success-dark);
+  font-size: 0.85rem;
+}
+
+.avatar-choice.locked {
+  opacity: 0.42;
+  filter: grayscale(0.85);
+  cursor: not-allowed;
+  position: relative;
+}
+
+.avatar-lock-tag {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  background: #2A354B;
+  color: #FFE8A3;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 99px;
+}
+
 /* Responsive Adjustments */
 @media (max-width: 860px) {
   .home-hero-grid {
@@ -1088,5 +1212,9 @@ select:focus-visible {
 
   .games-grid {
     grid-template-columns: 1fr;
+  }
+
+  .shelf-ledge {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }

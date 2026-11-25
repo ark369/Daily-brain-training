@@ -5,7 +5,7 @@
  *   warm non-punitive feedback, and celebratory round / Daily Mix completion screens.
  */
 
-import { getAvatarSvg, MEDAL_SVG, STAR_SVG, STUDIO_BADGES, UI_ICONS } from '../avatars.js';
+import { getAvatarSvg, getAvatarLabel, MEDAL_SVG, STAR_SVG, STUDIO_BADGES, STUDIO_SHELF_ITEMS, UI_ICONS } from '../avatars.js';
 import {
   playClick,
   playCorrect,
@@ -15,14 +15,14 @@ import {
   speakText,
   stopSpeaking,
 } from '../audio.js';
-import { getEffectiveTier, getTierInfo, getTodayKey, recordGameResult } from '../storage.js';
+import { getEffectiveTier, getGameStage, getTierInfo, getTodayKey, recordGameResult } from '../storage.js';
 import { escapeHtml } from '../games/utils.js';
 
 const OFFLINE_PAIRINGS = {
-  visualize: 'Offline idea: Build a 3D LEGO or wooden block tower together and sketch its top view on paper!',
-  compute: 'Offline idea: Play a linear number board game or estimate measurements while baking together!',
-  analyze: 'Offline idea: Play a family strategy board game (like Blokus, Rush Hour, or Set) to practice flexible rules!',
-  wordcraft: 'Offline idea: Spot prefixes and roots on road signs or cereal boxes, or read a chapter aloud together!',
+  visualize: 'Share Your Trick: Tell someone nearby how you pictured the shapes turning or stacking — then try building with LEGO or folding origami!',
+  compute: 'Share Your Trick: Explain one clever math shortcut you used today aloud (explaining it helps your brain lock it in twice as strongly!).',
+  analyze: 'Share Your Trick: Describe how you cracked the hidden rule today — great offline match: Blokus, Rush Hour, Set, or Clue!',
+  wordcraft: 'Share Your Trick: Use one new word, idiom, or root from today in a funny sentence at dinner tonight!',
 };
 
 function renderConfettiHtml() {
@@ -70,7 +70,14 @@ export function runGameSession(container, state, profile, gameMod, options, hand
     playCelebrate();
 
     const dailyIds = dailyGames.map((g) => g.meta.id);
-    const { completedDailyNow, newBadges, isNewPersonalBest } = recordGameResult(state, profile.id, {
+    const {
+      completedDailyNow,
+      newBadges,
+      isNewPersonalBest,
+      stageUp,
+      unlockedShelfCount,
+      newAvatarKey,
+    } = recordGameResult(state, profile.id, {
       gameId: gameMod.meta.id,
       correct,
       attempts,
@@ -98,6 +105,10 @@ export function runGameSession(container, state, profile, gameMod, options, hand
     const newBadgeObjs = (newBadges || [])
       .map((id) => STUDIO_BADGES.find((b) => b.id === id))
       .filter(Boolean);
+    const newShelfItem = unlockedShelfCount
+      ? STUDIO_SHELF_ITEMS.find((it) => it.starsRequired === unlockedShelfCount)
+      : null;
+    const curStage = getGameStage(profile, gameMod.meta.id);
 
     const speakSummary = completedDailyNow
       ? `Way to go ${profile.name}! You finished your whole daily mix and earned a gold star!`
@@ -119,13 +130,27 @@ export function runGameSession(container, state, profile, gameMod, options, hand
         </div>
 
         ${
-          newBadgeObjs.length > 0 || isNewPersonalBest
+          newShelfItem
+            ? `<div class="shelf-unlock-banner animate-pop">
+                 ${newShelfItem.svg}
+                 <div style="text-align:left;">
+                   <strong>New Studio Shelf Keepsake Unlocked!</strong>
+                   <div style="font-size:0.86rem;color:var(--ink-secondary);">${escapeHtml(newShelfItem.title)} is now displayed on your Home shelf.</div>
+                 </div>
+               </div>`
+            : ''
+        }
+
+        ${
+          newBadgeObjs.length > 0 || isNewPersonalBest || stageUp || newAvatarKey
             ? `<div class="badge-pills" style="justify-content:center;">
+                ${stageUp ? `<span class="studio-badge unlocked visualize">★ Mastery Stage ${stageUp.to} Unlocked!</span>` : ''}
+                ${newAvatarKey ? `<span class="studio-badge unlocked analyze">★ Bonus Avatar: ${escapeHtml(getAvatarLabel(newAvatarKey))}!</span>` : ''}
                 ${isNewPersonalBest ? '<span class="studio-badge unlocked compute">★ New Personal Best!</span>' : ''}
                 ${newBadgeObjs
                   .map(
                     (b) =>
-                      `<span class="studio-badge unlocked ${b.pillar}">★ Unlocked: ${escapeHtml(b.title)}</span>`
+                      `<span class="studio-badge unlocked ${b.pillar}">★ Milestone: ${escapeHtml(b.title)}</span>`
                   )
                   .join('')}
                </div>`
@@ -138,8 +163,8 @@ export function runGameSession(container, state, profile, gameMod, options, hand
             <div class="stat-label">${gameMod.meta.id === 'fact-studio' && tier >= 2 && !profile.calmMode ? 'Accurate Sprint Facts' : 'Solved Cleanly'}</div>
           </div>
           <div class="stat-tile">
-            <div class="stat-value">${escapeHtml(tierInfo.name)}</div>
-            <div class="stat-label">${escapeHtml(gameMod.meta.pillarLabel)} Tier</div>
+            <div class="stat-value">${escapeHtml(tierInfo.name)} · S${curStage}</div>
+            <div class="stat-label">${escapeHtml(gameMod.meta.pillarLabel)} Mastery</div>
           </div>
           ${
             isDailyMix

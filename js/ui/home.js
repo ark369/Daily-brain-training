@@ -6,10 +6,10 @@
  * - Free Play Lab (all 8 mini-games with pillar filters & effective tier badges)
  */
 
-import { getAvatarSvg, PILLAR_ICONS, STAR_SVG, STUDIO_BADGES } from '../avatars.js';
+import { getAvatarSvg, PILLAR_ICONS, STAR_SVG, STUDIO_BADGES, STUDIO_SHELF_ITEMS } from '../avatars.js';
 import { getDailyMix, getMonthCalendarData } from '../daily.js';
 import { PILLARS, GAMES } from '../games/index.js';
-import { getEffectiveTier, getTierInfo, getTodayKey } from '../storage.js';
+import { getEffectiveTier, getGameStage, getTierInfo, getTodayKey } from '../storage.js';
 import { escapeHtml } from '../games/utils.js';
 
 export function renderHome(container, state, activeProfile, activeFilter, handlers) {
@@ -22,7 +22,16 @@ export function renderHome(container, state, activeProfile, activeFilter, handle
   const isDailyComplete = dailyDoneCount === dailyGames.length;
   const tierInfo = getTierInfo(activeProfile.tier);
   const calData = getMonthCalendarData(activeProfile.completedDates);
+  const totalStars = (activeProfile.completedDates || []).length;
   const unlockedSet = new Set(activeProfile.unlockedBadges || []);
+
+  // Keep calendar badge shelf tidy: show unlocked badges + up to 3 upcoming targets
+  const unlockedBadges = STUDIO_BADGES.filter((b) => unlockedSet.has(b.id));
+  const nextBadges = STUDIO_BADGES.filter((b) => !unlockedSet.has(b.id)).slice(0, Math.max(3, 6 - unlockedBadges.length));
+  const displayBadges = [...unlockedBadges.slice(-5), ...nextBadges].slice(0, 6);
+
+  const unlockedShelfCount = STUDIO_SHELF_ITEMS.filter((it) => totalStars >= it.starsRequired).length;
+  const nextShelfItem = STUDIO_SHELF_ITEMS.find((it) => totalStars < it.starsRequired);
 
   const filteredGames =
     activeFilter === 'all' ? GAMES : GAMES.filter((g) => g.meta.pillar === activeFilter);
@@ -133,19 +142,50 @@ export function renderHome(container, state, activeProfile, activeFilter, handle
             .join('')}
         </div>
 
-        <div class="badge-shelf" aria-label="Mastery badges">
+        <div class="badge-shelf" aria-label="Mastery milestones">
           <div class="badge-shelf-head">
-            <span>Studio Badges</span>
+            <span>Mastery Milestones</span>
             <span>${unlockedSet.size}/${STUDIO_BADGES.length}</span>
           </div>
           <div class="badge-pills">
-            ${STUDIO_BADGES.map((b) => {
-              const unlocked = unlockedSet.has(b.id);
-              return `<span class="studio-badge ${unlocked ? `unlocked ${b.pillar}` : ''}" title="${escapeHtml(b.desc)}">${unlocked ? '★ ' : ''}${escapeHtml(b.title)}</span>`;
-            }).join('')}
+            ${displayBadges
+              .map((b) => {
+                const unlocked = unlockedSet.has(b.id);
+                return `<span class="studio-badge ${unlocked ? `unlocked ${b.pillar}` : ''}" title="${escapeHtml(b.desc)}">${unlocked ? '★ ' : ''}${escapeHtml(b.title)}</span>`;
+              })
+              .join('')}
           </div>
         </div>
       </aside>
+    </section>
+
+    <section class="card shelf-card" aria-label="Studio Shelf collection">
+      <div class="shelf-head">
+        <div>
+          <h2 class="shelf-title">${escapeHtml(activeProfile.name)}’s Studio Shelf</h2>
+          <p class="shelf-sub">
+            ${
+              nextShelfItem
+                ? `Collect permanent studio keepsakes with your Daily Mix stars — next up: <strong>${escapeHtml(nextShelfItem.title)}</strong> at ★ ${nextShelfItem.starsRequired} ${nextShelfItem.starsRequired === 1 ? 'star' : 'stars'}!`
+                : 'Amazing! You collected every single keepsake on the Studio Shelf!'
+            }
+          </p>
+        </div>
+        <span class="calendar-count">${unlockedShelfCount}/${STUDIO_SHELF_ITEMS.length} collected · ★ ${totalStars} total</span>
+      </div>
+      <div class="shelf-ledge" role="list" aria-label="Studio keepsakes">
+        ${STUDIO_SHELF_ITEMS.map((item) => {
+          const unlocked = totalStars >= item.starsRequired;
+          return `
+            <div role="listitem"
+                 class="shelf-item ${unlocked ? 'unlocked' : 'locked'}"
+                 title="${escapeHtml(item.title)} (${unlocked ? 'Unlocked!' : `Unlocks at ${item.starsRequired} total daily stars`})">
+              <div class="shelf-item-art">${item.svg}</div>
+              <span class="shelf-item-label">${unlocked ? escapeHtml(item.title) : `★ ${item.starsRequired}`}</span>
+            </div>
+          `;
+        }).join('')}
+      </div>
     </section>
 
     <section id="free-play-lab" aria-label="Free Play Lab">
@@ -162,7 +202,7 @@ export function renderHome(container, state, activeProfile, activeFilter, handle
         </div>
 
         <div class="pillar-filter" role="tablist" aria-label="Filter games by thinking pillar">
-          <button type="button" class="filter-btn ${activeFilter === 'all' ? 'active' : ''}" data-filter="all">All (8)</button>
+          <button type="button" class="filter-btn ${activeFilter === 'all' ? 'active' : ''}" data-filter="all">All (${GAMES.length})</button>
           ${PILLARS.map(
             (pil) =>
               `<button type="button" class="filter-btn ${activeFilter === pil.id ? 'active' : ''}" data-filter="${pil.id}">${escapeHtml(pil.name)}</button>`
@@ -175,6 +215,7 @@ export function renderHome(container, state, activeProfile, activeFilter, handle
           .map((g) => {
             const effTier = getTierInfo(getEffectiveTier(activeProfile, g.meta.pillar));
             const stats = activeProfile.gameStats[g.meta.id];
+            const stage = getGameStage(activeProfile, g.meta.id);
             const timingNote =
               g.meta.timed && effTier.id >= 2 && !activeProfile.calmMode
                 ? 'Calm 60s Sprint'
@@ -184,7 +225,10 @@ export function renderHome(container, state, activeProfile, activeFilter, handle
                 <div>
                   <div class="game-card-top">
                     <span class="game-icon-wrap ${g.meta.pillar}">${PILLAR_ICONS[g.meta.pillar]}</span>
-                    <span class="game-pillar-tag ${g.meta.pillar}">${escapeHtml(g.meta.pillarLabel)}</span>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                      ${stage >= 2 ? `<span class="stage-pill">Stage ${stage}</span>` : ''}
+                      <span class="game-pillar-tag ${g.meta.pillar}">${escapeHtml(g.meta.pillarLabel)}</span>
+                    </div>
                   </div>
                   <h3 class="game-card-title" style="margin-top:12px;">${escapeHtml(g.meta.title)}</h3>
                   <p class="game-card-desc">${escapeHtml(g.meta.shortDesc)}</p>

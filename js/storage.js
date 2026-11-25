@@ -188,13 +188,25 @@ export function deleteProfile(state, profileId) {
 const GAME_TO_BADGE = {
   'cube-architect': 'spatial-builder',
   'shape-shifter': 'spatial-builder',
+  'shape-composer': 'spatial-builder',
   'number-line': 'number-navigator',
   'fact-studio': 'number-navigator',
+  'target-forge': 'number-navigator',
   'balance-lab': 'logic-detective',
   'rule-switcher': 'logic-detective',
+  'clue-grid': 'logic-detective',
   'word-builder': 'word-wizard',
   'word-connections': 'word-wizard',
+  'story-detective': 'word-wizard',
 };
+
+const SHELF_THRESHOLDS = [1, 2, 4, 6, 9, 12, 16, 20, 25, 32, 40, 50];
+const BONUS_AVATAR_THRESHOLDS = [
+  { key: 'narwhal', stars: 3 },
+  { key: 'sloth', stars: 7 },
+  { key: 'wolf', stars: 14 },
+  { key: 'dragon', stars: 25 },
+];
 
 export function recordGameResult(state, profileId, {
   gameId,
@@ -206,8 +218,18 @@ export function recordGameResult(state, profileId, {
   todayKey = getTodayKey(),
 }) {
   const profile = state.profiles.find((p) => p.id === profileId);
-  if (!profile) return { completedDailyNow: false, newBadges: [], isNewPersonalBest: false };
+  if (!profile) {
+    return {
+      completedDailyNow: false,
+      newBadges: [],
+      isNewPersonalBest: false,
+      stageUp: null,
+      unlockedShelfCount: 0,
+      newAvatarKey: null,
+    };
+  }
 
+  const prevStars = profile.completedDates.length;
   const prev = profile.gameStats[gameId] || {
     plays: 0,
     bestScore: 0,
@@ -223,6 +245,21 @@ export function recordGameResult(state, profileId, {
     totalAttempts: prev.totalAttempts + attempts,
     lastNote: masteryNote || prev.lastNote,
   };
+
+  // Update within-tier 3-stage Mastery progression
+  const isFactSprint = gameId === 'fact-studio';
+  const sessionAcc = attempts > 0 ? Math.min(1, correct / attempts) : 0;
+  const isCleanSession = isFactSprint ? correct >= 8 || sessionAcc >= 0.8 : sessionAcc >= 0.8;
+
+  if (!profile.gameMastery) profile.gameMastery = {};
+  const gm = profile.gameMastery[gameId] || { stage: 1, cleanPlays: 0, recentAccuracies: [] };
+  const prevStage = gm.stage || 1;
+  if (isCleanSession) gm.cleanPlays = (gm.cleanPlays || 0) + 1;
+  gm.recentAccuracies = [...(gm.recentAccuracies || []), Math.round(sessionAcc * 100)].slice(-6);
+  const nextStage = gm.cleanPlays >= 6 ? 3 : gm.cleanPlays >= 3 ? 2 : 1;
+  gm.stage = Math.max(prevStage, nextStage);
+  profile.gameMastery[gameId] = gm;
+  const stageUp = gm.stage > prevStage ? { from: prevStage, to: gm.stage } : null;
 
   let completedDailyNow = false;
   if (isDailyMix) {
@@ -242,7 +279,17 @@ export function recordGameResult(state, profileId, {
     profile.dailyProgress[todayKey] = dp;
   }
 
-  // Evaluate competence-based Mastery Badges (informational, permanent!)
+  const totalStars = profile.completedDates.length;
+  const newlyUnlockedShelfThreshold =
+    completedDailyNow && totalStars > prevStars && SHELF_THRESHOLDS.includes(totalStars)
+      ? totalStars
+      : 0;
+  const newAvatarObj =
+    completedDailyNow && totalStars > prevStars
+      ? BONUS_AVATAR_THRESHOLDS.find((a) => a.stars === totalStars) || null
+      : null;
+
+  // Evaluate 16 competence-based Mastery Milestones (never granted for button-mashing 0/5!)
   if (!Array.isArray(profile.unlockedBadges)) profile.unlockedBadges = [];
   const newBadges = [];
   const grant = (badgeId) => {
@@ -251,12 +298,79 @@ export function recordGameResult(state, profileId, {
       newBadges.push(badgeId);
     }
   };
-  grant(GAME_TO_BADGE[gameId]);
-  if (profile.completedDates.length >= 1) grant('daily-star');
+
+  if (isCleanSession) grant(GAME_TO_BADGE[gameId]);
+  if (!isFactSprint && attempts >= 5 && correct === attempts) grant('perfect-round');
+  if (totalStars >= 1) grant('daily-star');
+  if (totalStars >= 5) grant('five-stars');
+  if (totalStars >= 15) grant('fifteen-stars');
+  if (totalStars >= 30) grant('thirty-stars');
   if (Object.keys(profile.gameStats).length >= 4) grant('all-rounder');
+  if (Object.keys(profile.gameStats).length >= 8) grant('grand-explorer');
+
+  const masteredWords = Object.values(profile.wordHistory || {}).filter((r) => r.box >= 3).length;
+  if (masteredWords >= 15) grant('word-collector');
+  if (masteredWords >= 45) grant('word-scholar');
+
+  const smoothFacts = Object.values(profile.factHistory || {}).filter((r) => r.box >= 3).length;
+  if (smoothFacts >= 20) grant('fact-smooth');
+
+  const maxStage = Math.max(1, ...Object.values(profile.gameMastery || {}).map((m) => m.stage || 1));
+  if (maxStage >= 2) grant('stage-2-unlock');
+  if (maxStage >= 3) grant('stage-3-master');
 
   saveState(state);
-  return { completedDailyNow, newBadges, isNewPersonalBest };
+  return {
+    completedDailyNow,
+    newBadges,
+    isNewPersonalBest,
+    stageUp,
+    unlockedShelfCount: newlyUnlockedShelfThreshold,
+    newAvatarKey: newAvatarObj ? newAvatarObj.key : null,
+  };
+}
+
+/**
+ * Recommends gentle tier promotions in Parent Corner when a child consistently
+ * shows strong mastery in a pillar (>= 4 plays with >= 88% avg accuracy, or Stage 3 reached).
+ */
+export function getTierUpRecommendations(profile, pillars, games) {
+  const recs = [];
+  for (const pil of pillars) {
+    const curTier = getEffectiveTier(profile, pil.id);
+    if (curTier >= 4) continue;
+    const pilGames = games.filter((g) => g.meta.pillar === pil.id);
+    let totalPlays = 0;
+    let accSum = 0;
+    let accCount = 0;
+    let hitStage3 = false;
+
+    for (const g of pilGames) {
+      const st = profile.gameStats && profile.gameStats[g.meta.id];
+      const gm = profile.gameMastery && profile.gameMastery[g.meta.id];
+      if (st) totalPlays += st.plays || 0;
+      if (gm && gm.stage >= 3) hitStage3 = true;
+      if (gm && Array.isArray(gm.recentAccuracies)) {
+        for (const a of gm.recentAccuracies) {
+          accSum += a;
+          accCount += 1;
+        }
+      }
+    }
+
+    const avgAcc = accCount > 0 ? Math.round(accSum / accCount) : 0;
+    if ((totalPlays >= 4 && avgAcc >= 88) || hitStage3) {
+      recs.push({
+        pillarId: pil.id,
+        pillarName: pil.name,
+        currentTier: curTier,
+        nextTier: curTier + 1,
+        avgAcc,
+        totalPlays,
+      });
+    }
+  }
+  return recs;
 }
 
 /**

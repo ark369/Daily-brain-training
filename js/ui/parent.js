@@ -6,14 +6,16 @@
  * - Export/Import local JSON backup & read the Evidence + Offline Pairing notes
  */
 
-import { AVATAR_KEYS, getAvatarSvg, getAvatarLabel } from '../avatars.js';
+import { AVATAR_KEYS, BONUS_AVATAR_STARS, isAvatarUnlocked, getAvatarSvg, getAvatarLabel } from '../avatars.js';
 import { PILLARS, GAMES } from '../games/index.js';
 import {
   TIERS,
+  getTierInfo,
   addProfile,
   deleteProfile,
   saveState,
   getTrickyFacts,
+  getTierUpRecommendations,
   exportStateJson,
   importStateJson,
 } from '../storage.js';
@@ -73,15 +75,23 @@ export function openParentModal(modalRoot, state, handlers) {
             </div>
 
             <div class="field-group">
-              <span class="field-label">Animal Avatar</span>
+              <span class="field-label">Animal Avatar (bonus critters unlock with cumulative Daily Mix stars!)</span>
               <div class="avatar-picker">
-                ${AVATAR_KEYS.map(
-                  (key) => `
-                  <button type="button" class="avatar-choice ${selectedProfile.avatar === key ? 'selected' : ''}"
-                          data-avatar-key="${key}" title="${getAvatarLabel(key)}" aria-label="${getAvatarLabel(key)}">
+                ${AVATAR_KEYS.map((key) => {
+                  const totalStars = (selectedProfile.completedDates || []).length;
+                  const unlocked = isAvatarUnlocked(key, totalStars);
+                  const req = BONUS_AVATAR_STARS[key] || 0;
+                  return `
+                  <button type="button"
+                          class="avatar-choice ${selectedProfile.avatar === key ? 'selected' : ''} ${unlocked ? '' : 'locked'}"
+                          data-avatar-key="${key}"
+                          ${unlocked ? '' : 'disabled'}
+                          title="${getAvatarLabel(key)}${unlocked ? '' : ` (unlocks at ★ ${req} daily stars)`}"
+                          aria-label="${getAvatarLabel(key)}">
                     ${getAvatarSvg(key)}
-                  </button>`
-                ).join('')}
+                    ${!unlocked ? `<span class="avatar-lock-tag">★${req}</span>` : ''}
+                  </button>`;
+                }).join('')}
               </div>
             </div>
 
@@ -139,6 +149,9 @@ export function openParentModal(modalRoot, state, handlers) {
           ${state.profiles
             .map((p) => {
               const tricky = getTrickyFacts(p, 8);
+              const recs = getTierUpRecommendations(p, PILLARS, GAMES);
+              const masteredWords = Object.values(p.wordHistory || {}).filter((r) => r.box >= 3).length;
+              const smoothFacts = Object.values(p.factHistory || {}).filter((r) => r.box >= 3).length;
               const pillarCounts = PILLARS.map((pil) => {
                 const gamesInPillar = GAMES.filter((g) => g.meta.pillar === pil.id);
                 const plays = gamesInPillar.reduce(
@@ -151,13 +164,35 @@ export function openParentModal(modalRoot, state, handlers) {
 
               return `
                 <div class="parent-row">
-                  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
                     <div style="display:flex;align-items:center;gap:10px;">
                       <span class="profile-avatar" style="width:36px;height:36px;">${getAvatarSvg(p.avatar)}</span>
                       <strong>${escapeHtml(p.name)}</strong>
                     </div>
-                    <span class="calendar-count">★ ${p.completedDates.length} total daily stars</span>
+                    <span class="calendar-count">★ ${p.completedDates.length} stars · ${masteredWords} words · ${smoothFacts} smooth facts</span>
                   </div>
+
+                  ${
+                    recs.length > 0
+                      ? recs
+                          .map((rec) => {
+                            const nextInfo = getTierInfo(rec.nextTier);
+                            return `
+                              <div class="tier-nudge-box">
+                                <span><strong>Ready to grow in ${escapeHtml(rec.pillarName)}!</strong> Averaging ${rec.avgAcc}% across ${rec.totalPlays} plays.</span>
+                                <button type="button"
+                                        class="btn btn-primary"
+                                        style="min-height:36px;padding:6px 14px;font-size:0.82rem;"
+                                        data-promote-profile="${escapeHtml(p.id)}"
+                                        data-promote-pillar="${escapeHtml(rec.pillarId)}"
+                                        data-promote-tier="${rec.nextTier}">
+                                  Level Up → ${escapeHtml(nextInfo.name)}
+                                </button>
+                              </div>`;
+                          })
+                          .join('')
+                      : ''
+                  }
 
                   <div class="skill-bars">
                     ${pillarCounts
@@ -184,11 +219,11 @@ export function openParentModal(modalRoot, state, handlers) {
                             ${tricky
                               .map(
                                 (f) =>
-                                  `<span class="fact-pill">${escapeHtml(f.key.replace('x', ' × ').replace('/', ' ÷ ').replace('+', ' + ').replace('-', ' − '))} (${(f.avgMs / 1000).toFixed(1)}s)</span>`
+                                  `<span class="fact-pill">${escapeHtml(f.key.replace('x', ' × ').replace('/', ' ÷ ').replace('+', ' + ').replace('-', ' − '))} (${(f.lastMs / 1000).toFixed(1)}s)</span>`
                               )
                               .join('')}
                            </div>`
-                        : '<span style="font-size:0.82rem;color:var(--ink-muted);">Play Fact Studio to build a personalized spaced-retrieval queue.</span>'
+                        : '<span style="font-size:0.82rem;color:var(--ink-muted);">All practiced facts are smooth right now (or play Fact Studio to start tracking!).</span>'
                     }
                   </div>
                 </div>
@@ -345,6 +380,20 @@ export function openParentModal(modalRoot, state, handlers) {
     }
 
     if (activeTab === 'progress') {
+      modalRoot.querySelectorAll('[data-promote-profile]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const targetProf = state.profiles.find((p) => p.id === btn.dataset.promoteProfile);
+          if (!targetProf) return;
+          const pilId = btn.dataset.promotePillar;
+          const nextTier = Number(btn.dataset.promoteTier);
+          if (!targetProf.pillarTiers) targetProf.pillarTiers = {};
+          targetProf.pillarTiers[pilId] = nextTier;
+          saveState(state);
+          handlers.onToast(`Promoted ${targetProf.name}'s ${pilId} pillar to ${getTierInfo(nextTier).name}!`);
+          render();
+        });
+      });
+
       modalRoot.querySelector('#btn-export-json').addEventListener('click', () => {
         const blob = new Blob([exportStateJson(state)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
