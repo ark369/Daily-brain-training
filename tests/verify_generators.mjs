@@ -1,14 +1,26 @@
 /**
  * Automated Verification Suite for Daily Thinking Studio
- * Stress-tests all 8 mini-game generators across all 4 tiers,
- * Daily Mix rotation, and spaced-retrieval fact scheduling.
+ * Stress-tests all 12 mini-game generators across all 4 tiers,
+ * 54-day Daily Mix rotation, exact 3D cube-net folding, logic-grid unique solvability,
+ * spaced-retrieval fact & word scheduling, and Milestone 2 mastery/shelf progression.
  */
 
 import assert from 'node:assert/strict';
 import { GAMES, PILLARS } from '../js/games/index.js';
 import { getDailyMix, getMonthCalendarData } from '../js/daily.js';
-import { loadState, recordFactAttempt, getTrickyFacts, recordGameResult } from '../js/storage.js';
+import {
+  loadState,
+  recordFactAttempt,
+  getTrickyFacts,
+  recordGameResult,
+  recordWordAttempt,
+  getGameStage,
+  getTierUpRecommendations,
+} from '../js/storage.js';
 import { CHIRAL_SHAPES, cellsSignature, rotateCells90CW, flipCellsHorizontal } from '../js/games/shapeShifter.js';
+import { foldNet3D, VALID_CUBE_NETS, INVALID_CUBE_NETS } from '../js/games/shapeComposer.js';
+import { evalOp } from '../js/games/targetForge.js';
+import { countValidAssignments } from '../js/games/clueGrid.js';
 
 let passed = 0;
 function check(name, fn) {
@@ -22,33 +34,83 @@ function check(name, fn) {
 }
 
 // 1. Verify registry structure
-check('Registry has 4 pillars and 8 games (2 per pillar)', () => {
+check('Registry has 4 pillars and 12 games (3 per pillar)', () => {
   assert.equal(PILLARS.length, 4);
-  assert.equal(GAMES.length, 8);
+  assert.equal(GAMES.length, 12);
   for (const pil of PILLARS) {
     const count = GAMES.filter((g) => g.meta.pillar === pil.id).length;
-    assert.equal(count, 2, `Expected 2 games in ${pil.id}`);
+    assert.equal(count, 3, `Expected 3 games in ${pil.id}`);
   }
 });
 
-// 2. Verify Daily Mix rotation across 30 days
-check('Daily Mix always picks 1 game per pillar and rotates day-to-day', () => {
-  let prevSig = '';
-  for (let day = 1; day <= 30; day++) {
-    const key = `2026-11-${String(day).padStart(2, '0')}`;
+// 2. Verify Daily Mix 54-day staggered rotation & uniformity
+check('Daily Mix picks 1 game per pillar, avoids consecutive repeats, and hits all 12 games uniformly over 54 days', () => {
+  const counts = Object.fromEntries(GAMES.map((g) => [g.meta.id, 0]));
+  let prevByPillar = null;
+  const baseMs = Date.UTC(2026, 10, 1);
+
+  for (let offset = 0; offset < 54; offset++) {
+    const d = new Date(baseMs + offset * 86400000);
+    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
     const mix = getDailyMix(key);
     assert.equal(mix.length, 4);
-    const pillarSet = new Set(mix.map((g) => g.meta.pillar));
-    assert.equal(pillarSet.size, 4, `All 4 pillars must appear on ${key}`);
-    const sig = mix.map((g) => g.meta.id).sort().join(',');
-    if (prevSig) {
-      assert.notEqual(sig, prevSig, `Consecutive days should not repeat identical 4-game set (${key})`);
+
+    const byPillar = {};
+    for (const g of mix) {
+      byPillar[g.meta.pillar] = g.meta.id;
+      counts[g.meta.id] += 1;
     }
-    prevSig = sig;
+    assert.equal(Object.keys(byPillar).length, 4, `All 4 pillars must appear on ${key}`);
+
+    if (prevByPillar) {
+      for (const pil of PILLARS) {
+        assert.notEqual(
+          byPillar[pil.id],
+          prevByPillar[pil.id],
+          `Pillar ${pil.id} repeated ${byPillar[pil.id]} on consecutive day ${key}`
+        );
+      }
+    }
+    prevByPillar = byPillar;
+  }
+
+  for (const g of GAMES) {
+    assert.equal(counts[g.meta.id], 18, `Expected ${g.meta.id} to appear exactly 18/54 days, got ${counts[g.meta.id]}`);
   }
 });
 
-// 3. Stress-test all 8 generators across all 4 tiers (25 sessions each)
+// Helper to verify Target Forge round has at least one exact solution using available cards
+function targetForgeHasSolution(r) {
+  const n = r.cards.length;
+  if (r.kind === 'two-card') {
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        if (i === j) continue;
+        for (const op of r.ops) {
+          if (evalOp(r.cards[i], op, r.cards[j]) === r.target) return true;
+        }
+      }
+    }
+    return false;
+  }
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      if (i === j) continue;
+      for (let k = 0; k < n; k++) {
+        if (k === i || k === j) continue;
+        for (const op1 of r.ops) {
+          const mid = evalOp(r.cards[i], op1, r.cards[j]);
+          for (const op2 of r.ops) {
+            if (evalOp(mid, op2, r.cards[k]) === r.target) return true;
+          }
+        }
+      }
+    }
+  }
+  return false;
+}
+
+// 3. Stress-test all 12 generators across all 4 tiers (25 sessions each)
 for (const game of GAMES) {
   for (let tier = 1; tier <= 4; tier++) {
     check(`${game.meta.id} tier ${tier} generates valid sessions (25 runs)`, () => {
@@ -106,6 +168,23 @@ for (const game of GAMES) {
             }
           }
 
+          if (game.meta.id === 'shape-composer') {
+            if (r.kind === 'tile-fit') {
+              const pieceArea = r.pieces.reduce((s, p) => s + p.cells.length, 0);
+              assert.equal(pieceArea, r.targetCells.length, 'Tile-fit pieces area must match silhouette area');
+              assert.ok(r.pieces.length >= 2);
+            } else if (r.kind === 'cube-net-valid') {
+              const folded = foldNet3D(r.cells);
+              assert.equal(folded.valid, r.isValid, 'Cube net validity must match exact 3D folder');
+            } else if (r.kind === 'cube-net-opposite') {
+              const folded = foldNet3D(r.cells);
+              assert.equal(folded.valid, true, 'Opposite-face round must use a valid cube net');
+              assert.equal(r.faceLabels[folded.oppositeOf0], r.answer, 'Opposite label must match 3D folder');
+              assert.equal(new Set(r.options).size, 4);
+              assert.ok(r.options.includes(r.answer));
+            }
+          }
+
           if (game.meta.id === 'number-line') {
             assert.ok(r.target >= r.min && r.target <= r.max, `Target ${r.target} out of [${r.min}, ${r.max}]`);
             assert.notEqual(r.startPos, r.target, `Number line frog must not start right on target (${r.targetLabel})`);
@@ -133,6 +212,12 @@ for (const game of GAMES) {
             for (const f of r.fluencyQueue) {
               assert.ok(Number.isFinite(f.answer));
             }
+          }
+
+          if (game.meta.id === 'target-forge') {
+            assert.equal(r.cards.length, 5, 'Target Forge should offer 5 cards');
+            assert.ok(Number.isFinite(r.target));
+            assert.ok(targetForgeHasSolution(r), `Target Forge round must be solvable (${r.sampleSolution})`);
           }
 
           if (game.meta.id === 'balance-lab') {
@@ -169,6 +254,22 @@ for (const game of GAMES) {
             }
           }
 
+          if (game.meta.id === 'clue-grid') {
+            assert.equal(r.chars.length, r.size);
+            assert.equal(r.items.length, r.size);
+            assert.equal(
+              countValidAssignments(r.clues, r.size),
+              1,
+              `Clue Grid must have EXACTLY 1 unique solution (got ${countValidAssignments(r.clues, r.size)})`
+            );
+            if (tier === 4) {
+              assert.ok(
+                r.clues.every((cl) => cl.type !== 'is'),
+                'Tier 4 Clue Grid must be pure deduction (no direct "is" giveaways)'
+              );
+            }
+          }
+
           if (game.meta.id === 'word-builder') {
             assert.equal(new Set(r.shuffledOptions).size, 4);
             assert.ok(r.shuffledOptions.includes(r.answer));
@@ -199,6 +300,14 @@ for (const game of GAMES) {
               assert.ok(typeof r.directionLabel === 'string' && r.directionLabel.length > 0);
             }
           }
+
+          if (game.meta.id === 'story-detective') {
+            assert.equal(new Set(r.shuffledOptions).size, 4);
+            assert.ok(r.shuffledOptions.includes(r.answer));
+            assert.ok(typeof r.title === 'string' && r.title.length > 0);
+            assert.ok(typeof r.before === 'string' && r.before.length > 5);
+            assert.ok(typeof r.wordKey === 'string' && r.wordKey.startsWith('sd:'));
+          }
         }
 
         if (game.meta.id === 'balance-lab') {
@@ -210,7 +319,22 @@ for (const game of GAMES) {
   }
 }
 
-// 4. Verify Spaced-Retrieval Fact Priority, Fast-First-Try Non-Repetition & Graduation
+// 4. Verify all 11 VALID_CUBE_NETS fold validly and all 8 INVALID_CUBE_NETS fail
+check('Exact 3D cube-net folder validates all 11 valid hexomino nets and rejects all 8 invalid impostors', () => {
+  assert.equal(VALID_CUBE_NETS.length, 11);
+  assert.equal(INVALID_CUBE_NETS.length, 8);
+  for (const net of VALID_CUBE_NETS) {
+    const res = foldNet3D(net.cells);
+    assert.equal(res.valid, true, `Valid net ${net.name} must fold cleanly`);
+    assert.ok(res.oppositeOf0 >= 1 && res.oppositeOf0 <= 5, `Valid net ${net.name} must identify opposite face`);
+  }
+  for (const bad of INVALID_CUBE_NETS) {
+    const res = foldNet3D(bad.cells);
+    assert.equal(res.valid, false, `Invalid net ${bad.name} must fail to fold into a closed cube`);
+  }
+});
+
+// 5. Verify Spaced-Retrieval Fact Priority, Fast-First-Try Non-Repetition & Graduation
 check('Spaced-retrieval prioritizes missed/hesitant facts, ignores fast first-try, and graduates cleanly', () => {
   const st = loadState();
   const kid = st.profiles[1]; // Explorer (Tier 2)
@@ -240,7 +364,7 @@ check('Spaced-retrieval prioritizes missed/hesitant facts, ignores fast first-tr
   recordFactAttempt(kid, '7x6', true, 1500, '2026-11-25');
   assert.ok(!getTrickyFacts(kid, 8).some((t) => t.key === '7x6'), 'After 2 smooth recalls, missed fact must graduate!');
 
-  // Completing all 4 daily games awards today's calendar star
+  // Completing all 4 daily games awards today's calendar star + first Studio Shelf keepsake
   const today = '2026-11-24';
   const mix = getDailyMix(today);
   const ids = mix.map((g) => g.meta.id);
@@ -257,34 +381,91 @@ check('Spaced-retrieval prioritizes missed/hesitant facts, ignores fast first-tr
     });
   }
   assert.equal(lastRes.completedDailyNow, true);
+  assert.equal(lastRes.unlockedShelfCount, 1, '1st Daily Mix star unlocks Studio Shelf keepsake #1');
   assert.ok(kid.completedDates.includes(today));
 
   const cal = getMonthCalendarData(kid.completedDates, new Date(2026, 10, 24));
   assert.equal(cal.starsThisMonth, 1);
 });
 
-// 4b. Verify back-to-back replay freshness for Fact Studio & Balance Lab
-check('Back-to-back replays of Fact Studio warm-ups and Balance Lab avoid repeats', () => {
+// 6. Verify back-to-back replay freshness for Fact Studio, Balance Lab & Story Detective
+check('Back-to-back replays of Fact Studio, Balance Lab, and Story Detective avoid immediate repeats', () => {
   const factMod = GAMES.find((g) => g.meta.id === 'fact-studio');
   const balMod = GAMES.find((g) => g.meta.id === 'balance-lab');
-  const freshProfile = { id: 'replay-test-kid', calmMode: false, factHistory: {}, gameStats: {} };
+  const storyMod = GAMES.find((g) => g.meta.id === 'story-detective');
+  const freshProfile = { id: 'replay-test-kid', calmMode: false, factHistory: {}, wordHistory: {}, gameStats: {}, recentPuzzles: {} };
 
   for (let tier = 1; tier <= 4; tier++) {
     const f1 = factMod.generateSession(tier, freshProfile)[0];
     const f2 = factMod.generateSession(tier, freshProfile)[0];
     const w1 = new Set(f1.warmups.map((w) => w.factKey));
-    const overlapW = f2.warmups.filter((w) => w1.has(w.factKey));
-    assert.equal(overlapW.length, 0, `Fact Studio Tier ${tier} back-to-back warm-ups should not repeat`);
+    assert.equal(f2.warmups.filter((w) => w1.has(w.factKey)).length, 0, `Fact Studio T${tier} warm-ups should not repeat`);
 
     const b1 = balMod.generateSession(tier, freshProfile);
     const b2 = balMod.generateSession(tier, freshProfile);
     const s1 = new Set(b1.map((r) => r.signature));
-    const overlapB = b2.filter((r) => s1.has(r.signature));
-    assert.equal(overlapB.length, 0, `Balance Lab Tier ${tier} back-to-back sessions should not repeat`);
+    assert.equal(b2.filter((r) => s1.has(r.signature)).length, 0, `Balance Lab T${tier} should not repeat`);
+
+    const st1 = storyMod.generateSession(tier, freshProfile);
+    st1.forEach((item) => recordWordAttempt(freshProfile, item.wordKey, true, '2026-11-25'));
+    const st2 = storyMod.generateSession(tier, freshProfile);
+    const stKeys1 = new Set(st1.map((r) => r.wordKey));
+    assert.equal(st2.filter((r) => stKeys1.has(r.wordKey)).length, 0, `Story Detective T${tier} mastered stories should not repeat immediately`);
   }
 });
 
-// 5. Verify EVERY shape in CHIRAL_SHAPES is orthogonally connected and strictly chiral
+// 7. Verify Milestone 2 Competence Milestones, 3-Stage Mastery, Bonus Avatars & Tier-Up Nudge
+check('Competence badges reject 0/5 plays, 3-stage mastery climbs at 3 & 6 clean sessions, and bonus avatars + tier nudges fire cleanly', () => {
+  const st = loadState();
+  const kid = st.profiles[0]; // Sprout (Tier 1)
+
+  // 0/5 must NOT unlock Spatial Ace badge or increment cleanPlays
+  const failRes = recordGameResult(st, kid.id, { gameId: 'shape-composer', correct: 0, attempts: 5 });
+  assert.ok(!kid.unlockedBadges.includes('spatial-builder'), '0/5 must NOT grant Spatial Ace badge');
+  assert.equal(failRes.stageUp, null);
+  assert.equal(getGameStage(kid, 'shape-composer'), 1);
+
+  // 3 clean plays -> unlocks Spatial Ace & climbs to Stage 2
+  recordGameResult(st, kid.id, { gameId: 'shape-composer', correct: 4, attempts: 5 });
+  assert.ok(kid.unlockedBadges.includes('spatial-builder'), '80% clean session should grant Spatial Ace');
+  recordGameResult(st, kid.id, { gameId: 'shape-composer', correct: 5, attempts: 5 });
+  const stage2Res = recordGameResult(st, kid.id, { gameId: 'shape-composer', correct: 5, attempts: 5 });
+  assert.deepEqual(stage2Res.stageUp, { from: 1, to: 2 });
+  assert.equal(getGameStage(kid, 'shape-composer'), 2);
+  assert.ok(kid.unlockedBadges.includes('stage-2-unlock'));
+
+  // 3 more clean plays (total 6) -> climbs to Stage 3 + triggers Visualize Tier-Up recommendation!
+  recordGameResult(st, kid.id, { gameId: 'shape-composer', correct: 5, attempts: 5 });
+  recordGameResult(st, kid.id, { gameId: 'shape-composer', correct: 5, attempts: 5 });
+  const stage3Res = recordGameResult(st, kid.id, { gameId: 'shape-composer', correct: 5, attempts: 5 });
+  assert.deepEqual(stage3Res.stageUp, { from: 2, to: 3 });
+  assert.ok(kid.unlockedBadges.includes('stage-3-master'));
+
+  const recs = getTierUpRecommendations(kid, PILLARS, GAMES);
+  assert.ok(recs.some((r) => r.pillarId === 'visualize' && r.nextTier === 2), 'Should recommend promoting Visualize to Tier 2');
+
+  // Completing 3 distinct daily dates unlocks Narwhal bonus avatar on star #3
+  for (const day of ['2026-11-20', '2026-11-21', '2026-11-22']) {
+    const mix = getDailyMix(day);
+    const ids = mix.map((g) => g.meta.id);
+    let r;
+    for (const id of ids) {
+      r = recordGameResult(st, kid.id, {
+        gameId: id,
+        correct: 4,
+        attempts: 4,
+        isDailyMix: true,
+        dailyGameIds: ids,
+        todayKey: day,
+      });
+    }
+    if (day === '2026-11-22') {
+      assert.equal(r.newAvatarKey, 'narwhal', '3rd Daily Mix star must unlock Narwhal bonus avatar');
+    }
+  }
+});
+
+// 8. Verify EVERY shape in CHIRAL_SHAPES is orthogonally connected and strictly chiral
 check('All CHIRAL_SHAPES are orthogonally connected and strictly chiral', () => {
   for (const shape of CHIRAL_SHAPES) {
     // Connectedness BFS

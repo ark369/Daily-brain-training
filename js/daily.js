@@ -17,11 +17,23 @@ function hashDateKey(dateKey) {
 export function getDailyMix(dateKey = getTodayKey()) {
   const dayNum = hashDateKey(dateKey);
 
-  // Rotate each pillar's pair on staggered phases so consecutive days never repeat the exact 4-game set
+  // Staggered periods across 3 games/pillar (periods 3, 9, 18, 27 => 54-day cycle!)
+  // Guarantees every pillar changes game every single day and distributes all 12 games evenly.
   const picks = PILLARS.map((pillar, pillarIdx) => {
     const pillarGames = GAMES.filter((g) => g.meta.pillar === pillar.id);
-    const offset = (dayNum + (pillarIdx % 2 === 0 ? 0 : Math.floor(dayNum / 2))) % pillarGames.length;
-    return pillarGames[Math.abs(offset)];
+    const len = pillarGames.length;
+    let raw;
+    if (pillarIdx === 0) {
+      raw = dayNum;
+    } else if (pillarIdx === 1) {
+      raw = dayNum + Math.floor(dayNum / 3);
+    } else if (pillarIdx === 2) {
+      raw = 2 * dayNum + 2 * Math.floor(dayNum / 6);
+    } else {
+      raw = dayNum + Math.floor(dayNum / 9);
+    }
+    const idx = ((raw % len) + len) % len;
+    return pillarGames[idx];
   });
 
   // Rotate pillar order gently each day for fresh interleaving

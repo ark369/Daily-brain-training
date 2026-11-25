@@ -1141,6 +1141,472 @@
   font-weight: 500;
 }
 
+/* ---------- Game 9: Shape Composer (2D Mosaic Tiling & 3D Cube Nets) ---------- */
+.composer-board {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  background: var(--surface-subtle);
+  border-radius: var(--radius-lg);
+  border: 2px solid var(--border-soft);
+  box-shadow: inset 0 2px 6px rgba(34, 42, 58, 0.05);
+}
+
+.comp-cell {
+  width: 54px;
+  height: 54px;
+  border-radius: 12px;
+}
+
+.comp-cell.void {
+  background: transparent;
+  pointer-events: none;
+}
+
+.comp-cell.socket {
+  background: var(--surface-card);
+  border: 2.5px dashed var(--border-strong);
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-spring), border-color var(--dur-fast), background-color var(--dur-fast);
+}
+
+.comp-cell.socket:hover {
+  border-color: var(--visualize);
+  background: var(--visualize-soft);
+  transform: scale(1.03);
+}
+
+.comp-cell.socket.filled {
+  border-style: solid;
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.14);
+  animation: popIn 220ms var(--ease-spring);
+}
+
+.composer-tray {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 520px;
+}
+
+.comp-piece-btn {
+  min-width: 82px;
+  min-height: 78px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  border: 2px solid var(--border-soft);
+  box-shadow: 0 3px 0 var(--border-soft);
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-spring), border-color var(--dur-fast), box-shadow var(--dur-fast), opacity var(--dur-fast);
+}
+
+.comp-piece-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: var(--visualize);
+}
+
+.comp-piece-btn.selected {
+  border-color: var(--visualize);
+  background: var(--visualize-soft);
+  box-shadow: 0 4px 0 var(--visualize-dark);
+  transform: translateY(-2px);
+}
+
+.comp-piece-btn.used {
+  opacity: 0.32;
+  box-shadow: none;
+  cursor: default;
+}
+
+.net-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 4px auto 0;
+}
+
+/* ---------- Game 10: Target Forge ---------- */
+.forge-stage {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+
+.forge-target-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 24px;
+  border-radius: var(--radius-pill);
+  background: var(--compute-soft);
+  border: 2px solid var(--compute);
+  box-shadow: 0 3px 0 var(--compute-mid);
+}
+
+.forge-target-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--compute-dark);
+}
+
+.forge-target-num {
+  font-family: var(--font-display);
+  font-size: 1.9rem;
+  font-weight: 700;
+  color: var(--compute-dark);
+  line-height: 1;
+}
+
+.forge-equation-card {
+  width: 100%;
+  max-width: 580px;
+  padding: 18px 16px;
+  background: var(--surface-subtle);
+  border-radius: var(--radius-lg);
+  border: 1.5px solid var(--border-soft);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.forge-slot {
+  min-width: 56px;
+  height: 56px;
+  padding: 0 12px;
+  border-radius: 14px;
+  background: var(--surface-card);
+  border: 2.5px dashed var(--border-strong);
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-spring), border-color var(--dur-fast), background-color var(--dur-fast);
+}
+
+.forge-slot.filled {
+  border-style: solid;
+  border-color: var(--compute);
+  background: #fff;
+  color: var(--ink-primary);
+  box-shadow: 0 3px 0 var(--compute-mid);
+}
+
+.forge-slot.filled:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.forge-paren {
+  font-family: var(--font-display);
+  font-size: 1.7rem;
+  font-weight: 600;
+  color: var(--ink-muted);
+  line-height: 1;
+}
+
+.forge-op-fixed {
+  font-family: var(--font-display);
+  font-size: 1.55rem;
+  font-weight: 700;
+  color: var(--ink-secondary);
+  padding: 0 2px;
+}
+
+.forge-op-group {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--surface-card);
+  border: 1.5px solid var(--border-soft);
+}
+
+.forge-op-btn {
+  min-width: 34px;
+  height: 36px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1.5px solid transparent;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  transition: background-color var(--dur-fast), color var(--dur-fast), border-color var(--dur-fast);
+}
+
+.forge-op-btn:hover:not(:disabled) {
+  background: var(--surface-subtle);
+  color: var(--ink-primary);
+}
+
+.forge-op-btn.active {
+  background: var(--compute);
+  border-color: var(--compute-dark);
+  color: #fff;
+}
+
+.forge-result {
+  min-width: 58px;
+  height: 52px;
+  padding: 0 12px;
+  border-radius: 14px;
+  background: var(--surface-card);
+  border: 2px solid var(--border-strong);
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: var(--ink-secondary);
+  display: inline-grid;
+  place-items: center;
+}
+
+.forge-result.match {
+  background: var(--success-soft);
+  border-color: var(--success);
+  color: var(--success-dark);
+  animation: popIn 260ms var(--ease-spring);
+}
+
+.forge-cards-tray {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
+.forge-num-card {
+  min-width: 64px;
+  height: 64px;
+  padding: 0 14px;
+  border-radius: 16px;
+  background: var(--surface-card);
+  border: 2.5px solid var(--ink-primary);
+  box-shadow: 0 4px 0 var(--border-strong);
+  font-family: var(--font-display);
+  font-size: 1.55rem;
+  font-weight: 700;
+  color: var(--ink-primary);
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-spring), opacity var(--dur-fast), box-shadow var(--dur-fast);
+}
+
+.forge-num-card:hover:not(:disabled) {
+  transform: translateY(-3px);
+  border-color: var(--compute);
+  color: var(--compute-dark);
+}
+
+.forge-num-card.used {
+  opacity: 0.28;
+  box-shadow: none;
+  border-style: dashed;
+  cursor: default;
+}
+
+/* ---------- Game 11: Clue Grid Detective ---------- */
+.clue-stage {
+  width: 100%;
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.clue-list-card {
+  width: 100%;
+  padding: 14px 18px;
+  background: var(--analyze-soft);
+  border: 1.5px solid var(--analyze);
+  border-radius: var(--radius-md);
+  text-align: left;
+}
+
+.clue-list-title {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--warm-hint-ink);
+  margin-bottom: 8px;
+}
+
+.clue-list {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.96rem;
+  line-height: 1.45;
+  color: var(--ink-primary);
+}
+
+.matcher-rows {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.matcher-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface-subtle);
+  border: 1.5px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  flex-wrap: wrap;
+}
+
+.matcher-char {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--ink-primary);
+  min-width: 84px;
+  text-align: left;
+}
+
+.matcher-options {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex: 1;
+  justify-content: flex-end;
+}
+
+.matcher-btn {
+  min-height: 42px;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-card);
+  border: 2px solid var(--border-strong);
+  font-family: var(--font-display);
+  font-size: 0.96rem;
+  font-weight: 600;
+  color: var(--ink-primary);
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-spring), background-color var(--dur-fast), border-color var(--dur-fast);
+}
+
+.matcher-btn:hover:not(:disabled) {
+  border-color: var(--visualize);
+  transform: translateY(-1px);
+}
+
+.matcher-btn.selected {
+  background: var(--visualize);
+  border-color: var(--visualize-dark);
+  color: #fff;
+}
+
+.logic-grid-wrap {
+  width: 100%;
+  overflow-x: auto;
+  display: flex;
+  justify-content: center;
+  padding: 4px 0;
+}
+
+.logic-grid-table {
+  border-collapse: separate;
+  border-spacing: 6px;
+  margin: 0 auto;
+}
+
+.logic-grid-table th {
+  font-family: var(--font-display);
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--ink-primary);
+  padding: 6px 8px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.logic-grid-table tbody th {
+  text-align: right;
+  padding-right: 10px;
+}
+
+.logic-grid-table td {
+  padding: 0;
+  text-align: center;
+}
+
+.lg-cell {
+  width: 56px;
+  height: 48px;
+  border-radius: 12px;
+  background: var(--surface-card);
+  border: 2px solid var(--border-strong);
+  box-shadow: 0 2px 0 var(--border-soft);
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--ink-muted);
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+  transition: transform var(--dur-fast) var(--ease-spring), background-color var(--dur-fast), border-color var(--dur-fast);
+}
+
+.lg-cell:hover:not(:disabled) {
+  border-color: var(--analyze-dark);
+  transform: translateY(-1px);
+}
+
+.lg-cell.is-no {
+  background: #FBF1EE;
+  border-color: #E2A899;
+  color: #C44D2D;
+}
+
+.lg-cell.is-yes {
+  background: var(--success-soft);
+  border-color: var(--success);
+  color: var(--success-dark);
+  box-shadow: 0 2px 0 var(--wordcraft-mid);
+}
+
+/* ---------- Game 12: Story Detective ---------- */
+.story-page-card {
+  width: 100%;
+  max-width: 560px;
+  padding: 22px 26px;
+  background: linear-gradient(180deg, #FFFDF7 0%, #FAF5E8 100%);
+  border-radius: var(--radius-lg);
+  border: 2px solid var(--wordcraft-mid);
+  box-shadow: 0 4px 0 rgba(74, 153, 100, 0.14);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  text-align: left;
+}
+
+.story-body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: clamp(1.06rem, 2.2vw, 1.2rem);
+  font-weight: 500;
+  line-height: 1.72;
+  color: var(--ink-primary);
+}
+
 /* Round / Daily Summary Celebration */
 .celebration-card {
   width: 100%;
@@ -1289,5 +1755,50 @@
 
   .analogy-arrow {
     font-size: 1.25rem;
+  }
+
+  .composer-board {
+    --comp-cell-size: 48px;
+  }
+
+  .comp-cell {
+    width: var(--comp-cell-size, 48px);
+    height: var(--comp-cell-size, 48px);
+  }
+
+  .forge-equation-card {
+    padding: 14px 10px;
+    gap: 7px;
+  }
+
+  .forge-slot {
+    min-width: 46px;
+    height: 48px;
+    font-size: 1.25rem;
+  }
+
+  .forge-num-card {
+    min-width: 54px;
+    height: 54px;
+    font-size: 1.35rem;
+  }
+
+  .logic-grid-table {
+    border-spacing: 4px;
+  }
+
+  .logic-grid-table th {
+    font-size: 0.78rem;
+    padding: 4px;
+  }
+
+  .lg-cell {
+    width: 44px;
+    height: 42px;
+    font-size: 1.15rem;
+  }
+
+  .story-page-card {
+    padding: 16px 18px;
   }
 }

@@ -448,7 +448,7 @@ export const STUDIO_BADGES = [
   { id: 'number-navigator', title: 'Compute Ace', desc: 'Score 80%+ clean (or 8+ sprint facts) in Compute', pillar: 'compute' },
   { id: 'logic-detective', title: 'Logic Ace', desc: 'Score 80%+ clean in an Analyze room', pillar: 'analyze' },
   { id: 'word-wizard', title: 'WordCraft Ace', desc: 'Score 80%+ clean in a WordCraft room', pillar: 'wordcraft' },
-  { id: 'perfect-round', title: 'Clean Sweep (5/5)', desc: 'Solve every puzzle on the first try in any room', pillar: 'visualize' },
+  { id: 'perfect-round', title: 'Clean Sweep', desc: 'Solve every puzzle on the first try in any room', pillar: 'visualize' },
   { id: 'all-rounder', title: 'Studio Explorer', desc: 'Play 4 different games across the studio', pillar: 'visualize' },
   { id: 'grand-explorer', title: 'Grand Explorer', desc: 'Play 8 different games across the studio', pillar: 'wordcraft' },
   { id: 'word-collector', title: 'Word Collector', desc: 'Master 15 vocabulary, phonics, or root items cleanly', pillar: 'wordcraft' },

@@ -653,13 +653,13 @@ select:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-2);
+  gap: 6px;
 }
 
 .game-icon-wrap {
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
   display: grid;
   place-items: center;
   flex-shrink: 0;
@@ -677,6 +677,12 @@ select:focus-visible {
   letter-spacing: 0.05em;
   padding: 4px 10px;
   border-radius: var(--radius-pill);
+  white-space: nowrap;
+}
+
+.game-card-top .game-pillar-tag {
+  font-size: 0.67rem;
+  padding: 3px 8px;
 }
 
 .game-pillar-tag.visualize { background: var(--visualize-soft); color: var(--visualize-dark); }
@@ -1069,13 +1075,25 @@ select:focus-visible {
 
 .shelf-ledge {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(74px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 8px;
   padding: 12px;
   background: var(--surface-subtle);
   border-radius: var(--radius-md);
   border: 1.5px solid var(--border-soft);
   border-bottom: 5px solid #D4C4AE;
+}
+
+@media (max-width: 960px) {
+  .shelf-ledge {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .shelf-ledge {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 .shelf-item {
@@ -1114,11 +1132,13 @@ select:focus-visible {
 .stage-pill {
   font-size: 0.7rem;
   font-weight: 700;
-  padding: 3px 8px;
+  padding: 3px 9px;
   border-radius: var(--radius-pill);
   background: #2A354B;
   color: #FFE8A3;
   letter-spacing: 0.03em;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .shelf-unlock-banner {

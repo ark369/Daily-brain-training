@@ -1,6 +1,6 @@
 /**
  * Game Session Shell:
- * - Renders any of the 8 mini-games inside an uncluttered, focused stage
+ * - Renders any of the 12 mini-games inside an uncluttered, focused stage
  * - Provides Read-Aloud trigger, collapsible Strategy Tip reflection card,
  *   warm non-punitive feedback, and celebratory round / Daily Mix completion screens.
  */

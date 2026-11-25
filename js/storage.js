@@ -300,7 +300,7 @@ export function recordGameResult(state, profileId, {
   };
 
   if (isCleanSession) grant(GAME_TO_BADGE[gameId]);
-  if (!isFactSprint && attempts >= 5 && correct === attempts) grant('perfect-round');
+  if (!isFactSprint && attempts >= 4 && correct === attempts) grant('perfect-round');
   if (totalStars >= 1) grant('daily-star');
   if (totalStars >= 5) grant('five-stars');
   if (totalStars >= 15) grant('fifteen-stars');
