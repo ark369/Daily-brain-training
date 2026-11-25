@@ -394,7 +394,7 @@ export function generateSession(tier = 1) {
     shuffledOptions: shuffle(item.options),
     prompt:
       item.kind === 'rhyme'
-        ? item.clue
+        ? 'Find the rhyming word!'
         : tier === 1
           ? 'Pick the starting letter to build the word!'
           : 'Snap the right word piece in place!',
@@ -427,7 +427,7 @@ export function renderRound(container, round, callbacks) {
       ${artHtml}
       <div class="morpheme-equation">
         <span class="morpheme-tile">${round.baseWord}</span>
-        <span class="morpheme-plus">≈</span>
+        <span class="analogy-link-label">rhymes with</span>
         <span class="morpheme-tile blank" id="wb-blank">?</span>
       </div>
       <p class="word-clue">${round.clue}</p>

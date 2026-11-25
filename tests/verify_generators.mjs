@@ -145,15 +145,31 @@ for (const game of GAMES) {
           if (game.meta.id === 'word-builder') {
             assert.equal(new Set(r.shuffledOptions).size, 4);
             assert.ok(r.shuffledOptions.includes(r.answer));
+            assert.notEqual(r.prompt.trim(), r.clue.trim(), 'Word Builder prompt and clue must not duplicate');
           }
 
           if (game.meta.id === 'word-connections') {
+            assert.ok(!r.prompt.includes('::'), `Prompt must not use :: notation: ${r.prompt}`);
             if (r.kind === 'choice') {
               assert.equal(new Set(r.shuffledOptions).size, 4);
               assert.ok(r.shuffledOptions.includes(r.answer));
+              if (r.subkind === 'analogy') {
+                assert.equal(r.pairA.length, 2);
+                assert.ok(typeof r.pairBLeft === 'string' && r.pairBLeft.length > 0);
+              } else if (r.subkind === 'opposite' || r.subkind === 'synonym') {
+                assert.ok(typeof r.targetWord === 'string' && r.targetWord.length > 0);
+              } else if (r.subkind === 'sentence') {
+                assert.ok(typeof r.sentenceBefore === 'string' && typeof r.sentenceAfter === 'string');
+              } else if (r.subkind === 'definition') {
+                assert.ok(typeof r.definition === 'string' && r.definition.length > 0);
+              } else {
+                assert.ok(typeof r.cardHint === 'string' && r.cardHint.length > 0);
+                assert.notEqual(r.prompt.trim(), r.cardHint.trim(), 'Prompt and cardHint must not duplicate');
+              }
             } else {
               assert.equal(r.ordered.length, 3);
               assert.equal(r.shuffledWords.length, 3);
+              assert.ok(typeof r.directionLabel === 'string' && r.directionLabel.length > 0);
             }
           }
         }

@@ -20,58 +20,65 @@ export const meta = {
 };
 
 const WEIGHT_ITEMS = {
-  star: { label: 'Gold Star', short: 'Star', color: '#E9A825', stroke: '#9E6D08' },
-  gem: { label: 'Teal Gem', short: 'Gem', color: '#2E9690', stroke: '#1B625E' },
-  berry: { label: 'Coral Berry', short: 'Berry', color: '#E46B49', stroke: '#A33E22' },
-  leaf: { label: 'Sage Acorn', short: 'Acorn', color: '#4B9B64', stroke: '#2B683E' },
+  star: { label: 'Gold Star', short: 'Star', color: '#F4B41A', hi: '#FFE28A', stroke: '#1F2430' },
+  gem: { label: 'Teal Gem', short: 'Gem', color: '#1FA39B', hi: '#7BE3DC', stroke: '#1F2430' },
+  berry: { label: 'Coral Berry', short: 'Berry', color: '#EB5E3C', hi: '#FFA18A', stroke: '#1F2430' },
+  leaf: { label: 'Sage Acorn', short: 'Acorn', color: '#3FA45E', hi: '#8CE0A4', stroke: '#1F2430' },
 };
 
-function renderItemTokenSvg(item, cx, cy) {
+function renderItemTokenSvg(item, cx, cy, forChoice = false, scale = 1) {
+  const filterAttr = forChoice ? '' : 'filter="url(#bal-obj-shadow)"';
+  const scaleStr = scale === 1 ? '' : ` scale(${scale})`;
   if (item.type === 'num') {
     return `
-      <g transform="translate(${cx}, ${cy})">
-        <rect x="-18" y="-24" width="36" height="24" rx="6" fill="#5D6778" stroke="#232733" stroke-width="1.8"/>
-        <text x="0" y="-7" text-anchor="middle" font-family="Fredoka, sans-serif" font-size="14" font-weight="700" fill="#FFF">${item.value}</text>
+      <g transform="translate(${cx}, ${cy})${scaleStr}" ${filterAttr}>
+        <rect x="-18" y="-30" width="36" height="30" rx="8" fill="#2A354B" stroke="#181F2E" stroke-width="2.1"/>
+        <rect x="-15" y="-27" width="30" height="5" rx="2.5" fill="rgba(255,255,255,0.16)"/>
+        <text x="0" y="-9" text-anchor="middle" font-family="Fredoka, sans-serif" font-size="16" font-weight="700" fill="#FFFFFF">${item.value}</text>
       </g>
     `;
   }
   if (item.type === 'mystery') {
     return `
-      <g transform="translate(${cx}, ${cy})">
-        <rect x="-18" y="-24" width="36" height="24" rx="6" fill="#FFF4D6" stroke="#C98810" stroke-width="2" stroke-dasharray="4 2"/>
-        <text x="0" y="-7" text-anchor="middle" font-family="Fredoka, sans-serif" font-size="15" font-weight="700" fill="#9E6D08">?</text>
+      <g transform="translate(${cx}, ${cy})${scaleStr}" ${filterAttr}>
+        <rect x="-18" y="-30" width="36" height="30" rx="8" fill="#FFE8A3" stroke="#B67600" stroke-width="2.2" stroke-dasharray="4 2.5"/>
+        <text x="0" y="-9" text-anchor="middle" font-family="Fredoka, sans-serif" font-size="17" font-weight="700" fill="#8C5800">?</text>
       </g>
     `;
   }
   const info = WEIGHT_ITEMS[item.kind] || WEIGHT_ITEMS.gem;
   if (item.kind === 'star') {
     return `
-      <g transform="translate(${cx}, ${cy - 14})">
-        <path d="M0,-14 L4,-5 L14,-4 L6,3 L9,13 L0,7 L-9,13 L-6,3 L-14,-4 L-4,-5 Z"
-              fill="${info.color}" stroke="${info.stroke}" stroke-width="1.8" stroke-linejoin="round"/>
+      <g transform="translate(${cx}, ${cy})${scaleStr} translate(0, -17)" ${filterAttr}>
+        <path d="M0,-17 L5,-6 L17,-5 L7.5,3.5 L10.5,15.5 L0,9 L-10.5,15.5 L-7.5,3.5 L-17,-5 L-5,-6 Z"
+              fill="${info.color}" stroke="${info.stroke}" stroke-width="2.1" stroke-linejoin="round"/>
+        <path d="M0,-12 L3,-5 L-4,-4 Z" fill="${info.hi}" opacity="0.85"/>
       </g>
     `;
   }
   if (item.kind === 'gem') {
     return `
-      <g transform="translate(${cx}, ${cy - 13})">
-        <polygon points="0,-14 13,-3 8,12 -8,12 -13,-3"
-                 fill="${info.color}" stroke="${info.stroke}" stroke-width="1.8" stroke-linejoin="round"/>
+      <g transform="translate(${cx}, ${cy})${scaleStr} translate(0, -16)" ${filterAttr}>
+        <polygon points="0,-17 16,-4 10,14 -10,14 -16,-4"
+                 fill="${info.color}" stroke="${info.stroke}" stroke-width="2.1" stroke-linejoin="round"/>
+        <polygon points="0,-13 10,-4 0,0 -10,-4" fill="${info.hi}" opacity="0.72"/>
       </g>
     `;
   }
   if (item.kind === 'berry') {
     return `
-      <g transform="translate(${cx}, ${cy - 12})">
-        <circle cx="0" cy="0" r="12" fill="${info.color}" stroke="${info.stroke}" stroke-width="1.8"/>
-        <path d="M-3,-12 Q0,-18 5,-14" fill="none" stroke="#3C7D50" stroke-width="2.2" stroke-linecap="round"/>
+      <g transform="translate(${cx}, ${cy})${scaleStr} translate(0, -15)" ${filterAttr}>
+        <circle cx="0" cy="1" r="14.5" fill="${info.color}" stroke="${info.stroke}" stroke-width="2.1"/>
+        <ellipse cx="-4.5" cy="-4.5" rx="4.2" ry="2.6" transform="rotate(-25 -4.5 -4.5)" fill="${info.hi}" opacity="0.82"/>
+        <path d="M-3,-13 Q1,-21 7,-15" fill="none" stroke="#2D7B48" stroke-width="2.6" stroke-linecap="round"/>
       </g>
     `;
   }
   return `
-    <g transform="translate(${cx}, ${cy - 13})">
-      <ellipse cx="0" cy="2" rx="11" ry="11" fill="${info.color}" stroke="${info.stroke}" stroke-width="1.8"/>
-      <rect x="-12" y="-12" width="24" height="7" rx="3" fill="#7D5A44" stroke="#232733" stroke-width="1.6"/>
+    <g transform="translate(${cx}, ${cy})${scaleStr} translate(0, -15)" ${filterAttr}>
+      <ellipse cx="0" cy="3" rx="13" ry="12.5" fill="${info.color}" stroke="${info.stroke}" stroke-width="2.1"/>
+      <ellipse cx="-4.5" cy="1" rx="3.2" ry="5" fill="${info.hi}" opacity="0.65"/>
+      <rect x="-14" y="-14" width="28" height="8.5" rx="3.8" fill="#7B563E" stroke="${info.stroke}" stroke-width="2"/>
     </g>
   `;
 }
@@ -82,40 +89,54 @@ function renderScaleSvg(scale) {
 
   const drawPanItems = (items, centerX, panY) => {
     const count = items.length;
-    const spacing = count >= 4 ? 26 : 34;
+    const itemScale = count >= 4 ? 0.86 : 1;
+    const spacing = count >= 4 ? 33 : 39;
     const startX = centerX - ((count - 1) * spacing) / 2;
-    return items.map((it, idx) => renderItemTokenSvg(it, startX + idx * spacing, panY - 4)).join('');
+    return items
+      .map((it, idx) => renderItemTokenSvg(it, startX + idx * spacing, panY - 3, false, itemScale))
+      .join('');
   };
 
   const statusLabel =
     scale.tilt === 0 ? 'BALANCED (=)' : scale.tilt < 0 ? 'LEFT IS HEAVIER' : 'RIGHT IS HEAVIER';
-  const pillFill = scale.tilt === 0 ? '#E3F4EB' : '#F4EFE6';
+  const pillFill = scale.tilt === 0 ? '#E3F4EB' : '#EFEAE0';
   const pillText = scale.tilt === 0 ? '#1E6E46' : '#585F6D';
 
   return `
-    <svg class="scale-svg" viewBox="0 0 400 172" role="img" aria-label="Pan balance scale: ${statusLabel}">
-      <!-- Wooden Base -->
-      <rect x="135" y="128" width="130" height="12" rx="6" fill="#8C6244" stroke="#232733" stroke-width="2"/>
-      <rect x="192" y="64" width="16" height="66" rx="4" fill="#A67653" stroke="#232733" stroke-width="2"/>
+    <svg class="scale-svg" viewBox="0 0 400 186" role="img" aria-label="Pan balance scale: ${statusLabel}">
+      <defs>
+        <filter id="bal-obj-shadow" x="-25%" y="-25%" width="150%" height="150%">
+          <feDropShadow dx="0" dy="2" stdDeviation="1.6" flood-color="#1E2430" flood-opacity="0.2"/>
+        </filter>
+      </defs>
+
+      <!-- Quiet, recessed warm-linen scale frame so pan objects command attention -->
+      <rect x="144" y="138" width="112" height="9" rx="4.5" fill="#E6DFD3" stroke="#CFC7B9" stroke-width="1.2"/>
+      <rect x="195" y="68" width="10" height="71" rx="4" fill="#EAE4D9" stroke="#CFC7B9" stroke-width="1.2"/>
+
       <!-- Beam + Pans -->
       <g class="scale-beam-group" style="transform: rotate(${angle}deg);">
-        <line x1="68" y1="66" x2="332" y2="66" stroke="#232733" stroke-width="6" stroke-linecap="round"/>
+        <line x1="66" y1="68" x2="334" y2="68" stroke="#C2B9AC" stroke-width="3.4" stroke-linecap="round"/>
+
         <!-- Left Pan -->
-        <line x1="78" y1="66" x2="62" y2="104" stroke="#6E7685" stroke-width="2"/>
-        <line x1="78" y1="66" x2="94" y2="104" stroke="#6E7685" stroke-width="2"/>
-        <path d="M 32 104 L 124 104 L 112 116 L 44 116 Z" fill="#E8C268" stroke="#232733" stroke-width="2" stroke-linejoin="round"/>
-        ${drawPanItems(scale.left, 78, 104)}
+        <line x1="79" y1="68" x2="54" y2="112" stroke="#D3CCC0" stroke-width="1.3"/>
+        <line x1="79" y1="68" x2="104" y2="112" stroke="#D3CCC0" stroke-width="1.3"/>
+        <path d="M 10 112 L 148 112 L 136 121 L 22 121 Z" fill="#EFE9DF" stroke="#CBC3B6" stroke-width="1.3" stroke-linejoin="round"/>
+        ${drawPanItems(scale.left, 79, 112)}
+
         <!-- Right Pan -->
-        <line x1="322" y1="66" x2="306" y2="104" stroke="#6E7685" stroke-width="2"/>
-        <line x1="322" y1="66" x2="338" y2="104" stroke="#6E7685" stroke-width="2"/>
-        <path d="M 276 104 L 368 104 L 356 116 L 288 116 Z" fill="#E8C268" stroke="#232733" stroke-width="2" stroke-linejoin="round"/>
-        ${drawPanItems(scale.right, 322, 104)}
+        <line x1="321" y1="68" x2="296" y2="112" stroke="#D3CCC0" stroke-width="1.3"/>
+        <line x1="321" y1="68" x2="346" y2="112" stroke="#D3CCC0" stroke-width="1.3"/>
+        <path d="M 252 112 L 390 112 L 378 121 L 264 121 Z" fill="#EFE9DF" stroke="#CBC3B6" stroke-width="1.3" stroke-linejoin="round"/>
+        ${drawPanItems(scale.right, 321, 112)}
       </g>
-      <!-- Pivot pin -->
-      <circle cx="200" cy="66" r="8" fill="#E9A825" stroke="#232733" stroke-width="2.2"/>
+
+      <!-- Subtle pivot pin -->
+      <circle cx="200" cy="68" r="5" fill="#DDD6CA" stroke="#B9B0A2" stroke-width="1.3"/>
+
       <!-- Clean status pill below base -->
-      <rect x="136" y="147" width="128" height="22" rx="11" fill="${pillFill}" stroke="#D8D0C4" stroke-width="1.2"/>
-      <text x="200" y="162" text-anchor="middle" font-family="Lexend, sans-serif" font-size="11" font-weight="700" fill="${pillText}">
+      <rect x="136" y="158" width="128" height="22" rx="11" fill="${pillFill}" stroke="#D8D0C4" stroke-width="1.1"/>
+      <text x="200" y="173" text-anchor="middle" font-family="Lexend, sans-serif" font-size="11" font-weight="700" fill="${pillText}">
         ${statusLabel}
       </text>
     </svg>
@@ -284,8 +305,8 @@ export function renderRound(container, round, callbacks) {
       btn.type = 'button';
       btn.className = 'choice-btn';
       btn.innerHTML = `
-        <svg viewBox="-20 -28 40 34" width="38" height="34" aria-hidden="true">
-          ${renderItemTokenSvg({ type: 'shape', kind: opt.key }, 0, 0)}
+        <svg viewBox="-22 -37 44 41" width="44" height="41" aria-hidden="true">
+          ${renderItemTokenSvg({ type: 'shape', kind: opt.key }, 0, 0, true)}
         </svg>
         <span>${opt.label}</span>
       `;
