@@ -1,0 +1,96 @@
+/* ==========================================================================
+   Daily Thinking Studio — Design Tokens ("Tactile Sunlit Studio")
+   Warm paper surfaces, earthy-bright pillar hues, Montessori-inspired depth
+   ========================================================================== */
+
+:root {
+  /* Surfaces */
+  --bg-canvas: hsl(38, 42%, 96%);
+  --bg-canvas-warm: hsl(36, 36%, 92%);
+  --surface-card: hsl(40, 50%, 99%);
+  --surface-subtle: hsl(36, 32%, 94%);
+  --surface-inset: hsl(35, 28%, 90%);
+
+  /* Ink & Borders */
+  --ink-primary: hsl(222, 24%, 17%);
+  --ink-secondary: hsl(220, 14%, 38%);
+  --ink-muted: hsl(220, 10%, 52%);
+  --border-soft: hsl(35, 22%, 85%);
+  --border-strong: hsl(34, 18%, 74%);
+
+  /* Pillar Palette (Curated HSL) */
+  --visualize: hsl(176, 52%, 37%);
+  --visualize-dark: hsl(176, 56%, 27%);
+  --visualize-soft: hsl(175, 48%, 92%);
+  --visualize-mid: hsl(176, 46%, 80%);
+
+  --compute: hsl(14, 76%, 54%);
+  --compute-dark: hsl(14, 76%, 41%);
+  --compute-soft: hsl(16, 82%, 94%);
+  --compute-mid: hsl(15, 76%, 84%);
+
+  --analyze: hsl(39, 86%, 47%);
+  --analyze-dark: hsl(35, 84%, 35%);
+  --analyze-soft: hsl(42, 88%, 92%);
+  --analyze-mid: hsl(40, 82%, 80%);
+
+  --wordcraft: hsl(146, 42%, 38%);
+  --wordcraft-dark: hsl(146, 48%, 28%);
+  --wordcraft-soft: hsl(145, 42%, 92%);
+  --wordcraft-mid: hsl(145, 38%, 80%);
+
+  /* Semantic Feedback */
+  --success: hsl(148, 52%, 38%);
+  --success-dark: hsl(148, 56%, 28%);
+  --success-soft: hsl(146, 54%, 92%);
+
+  --warm-hint: hsl(36, 90%, 46%);
+  --warm-hint-soft: hsl(42, 92%, 93%);
+  --warm-hint-ink: hsl(30, 62%, 26%);
+
+  --gentle-retry: hsl(22, 78%, 52%);
+  --gentle-retry-soft: hsl(24, 86%, 94%);
+
+  /* Brand Accent (Primary Interactive) */
+  --accent: hsl(176, 52%, 37%);
+  --accent-dark: hsl(176, 56%, 26%);
+
+  /* Typography */
+  --font-display: 'Fredoka', ui-rounded, 'SF Pro Rounded', system-ui, -apple-system, sans-serif;
+  --font-body: 'Lexend', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* Spacing Scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* Radii */
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --radius-xl: 28px;
+  --radius-pill: 999px;
+
+  /* Tactile Elevation */
+  --shadow-card: 0 2px 6px hsla(30, 30%, 20%, 0.06), 0 8px 24px hsla(30, 28%, 24%, 0.06);
+  --shadow-card-hover: 0 4px 10px hsla(30, 30%, 20%, 0.08), 0 14px 32px hsla(30, 28%, 24%, 0.1);
+  --shadow-modal: 0 24px 64px hsla(222, 30%, 12%, 0.24);
+  --shadow-btn-depth: 0 4px 0;
+
+  /* Motion */
+  --ease-spring: cubic-bezier(0.22, 1.28, 0.36, 1);
+  --ease-smooth: cubic-bezier(0.25, 0.8, 0.25, 1);
+  --dur-fast: 140ms;
+  --dur-med: 260ms;
+  --dur-slow: 420ms;
+
+  /* Layout */
+  --max-width: 1040px;
+  --stage-width: 780px;
+}

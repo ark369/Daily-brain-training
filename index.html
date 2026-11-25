@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Daily Thinking Studio — Evidence-Based Brain Games for Kids</title>
+  <meta
+    name="description"
+    content="A calm, playful daily thinking workout for kids ages 5 to 11+ featuring spatial reasoning, number sense, pre-algebraic logic, and word-building mini-games backed by learning science."
+  />
+  <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Lexend:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="./css/tokens.css" />
+  <link rel="stylesheet" href="./css/base.css" />
+  <link rel="stylesheet" href="./css/games.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <button type="button" class="brand" id="btn-home-brand" aria-label="Go to Daily Thinking Studio home">
+        <img src="./assets/favicon.svg" alt="" class="brand-mark" width="40" height="40" />
+        <span class="brand-text">
+          <span class="brand-title">Daily Thinking Studio</span>
+          <span class="brand-sub">Spatial · Math · Logic · WordCraft</span>
+        </span>
+      </button>
+
+      <nav class="topbar-controls" aria-label="Studio settings">
+        <button
+          type="button"
+          class="btn-icon"
+          id="btn-toggle-sound"
+          aria-pressed="true"
+          title="Toggle sound effects"
+        >
+          <span aria-hidden="true" id="sound-icon" style="display:inline-flex;"></span>
+          <span>Sound</span>
+        </button>
+        <button
+          type="button"
+          class="btn-icon"
+          id="btn-toggle-speech"
+          aria-pressed="false"
+          title="Toggle spoken read-aloud prompts"
+        >
+          <span aria-hidden="true" id="speech-icon" style="display:inline-flex;"></span>
+          <span>Read Aloud</span>
+        </button>
+        <button
+          type="button"
+          class="btn-icon"
+          id="btn-open-parent"
+          title="Parent Corner: edit kids' profiles, tiers, and progress"
+        >
+          <span aria-hidden="true" id="parent-icon" style="display:inline-flex;"></span>
+          <span>Parent Corner</span>
+        </button>
+      </nav>
+    </header>
+
+    <main id="app-main" aria-live="polite"></main>
+
+    <footer class="app-footer">
+      <span>100% private &amp; saved on this device · Zero ads, zero tracking.</span>
+      <span>Tip: Pair 10 minutes here with blocks, books, board games &amp; outdoor play.</span>
+    </footer>
+  </div>
+
+  <div id="modal-root"></div>
+  <div id="toast-root" aria-live="polite"></div>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
