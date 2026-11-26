@@ -69,15 +69,15 @@ function hasAllColumnTopsVisible(grid) {
 
 function generateStructure(tier) {
   const cfg = {
-    1: { size: 3, maxH: 2, minTotal: 3, maxTotal: 7, minHidden: 0 },
-    2: { size: 3, maxH: 3, minTotal: 7, maxTotal: 13, minHidden: 1 },
-    3: { size: 3, maxH: 4, minTotal: 11, maxTotal: 20, minHidden: 2 },
-    4: { size: 4, maxH: 4, minTotal: 15, maxTotal: 26, minHidden: 3 },
-  }[tier] || { size: 3, maxH: 2, minTotal: 4, maxTotal: 8, minHidden: 0 };
+    1: { size: 3, maxH: 2, minTotal: 3, maxTotal: 7, minHidden: 0, minCols: 2 },
+    2: { size: 3, maxH: 3, minTotal: 7, maxTotal: 13, minHidden: 1, minCols: 4 },
+    3: { size: 3, maxH: 4, minTotal: 11, maxTotal: 20, minHidden: 2, minCols: 5 },
+    4: { size: 4, maxH: 4, minTotal: 17, maxTotal: 28, minHidden: 4, minCols: 6 },
+  }[tier] || { size: 3, maxH: 2, minTotal: 4, maxTotal: 8, minHidden: 0, minCols: 2 };
 
-  for (let attempt = 0; attempt < 250; attempt++) {
+  for (let attempt = 0; attempt < 280; attempt++) {
     const grid = Array.from({ length: cfg.size }, () => Array(cfg.size).fill(0));
-    const numCols = randInt(Math.max(2, cfg.size), Math.min(cfg.size * cfg.size - 1, cfg.size + 4));
+    const numCols = randInt(cfg.minCols, Math.min(cfg.size * cfg.size - 1, cfg.size + 5));
 
     // Seed near back-center and grow outward to keep natural stepped towers
     grid[0][0] = randInt(1, cfg.maxH);
@@ -117,6 +117,7 @@ function generateStructure(tier) {
       total >= cfg.minTotal &&
       total <= cfg.maxTotal &&
       hiddenSupports >= cfg.minHidden &&
+      baseCount >= cfg.minCols &&
       isConnected(grid) &&
       hasAllColumnTopsVisible(grid)
     ) {
@@ -130,7 +131,9 @@ function generateStructure(tier) {
       ? [[2, 1, 0], [1, 1, 0], [0, 0, 0]]
       : tier === 2
         ? [[3, 2, 1], [2, 1, 0], [1, 0, 0]]
-        : [[4, 3, 1], [3, 2, 1], [1, 1, 0]];
+        : tier === 3
+          ? [[4, 3, 1], [3, 2, 1], [1, 1, 0]]
+          : [[4, 3, 2, 0], [3, 2, 1, 0], [2, 1, 0, 0], [1, 0, 0, 0]];
   let total = 0;
   let maxH = 0;
   let baseCount = 0;
@@ -154,7 +157,7 @@ function makeTopViewDistractors(grid) {
   const seen = new Set([getFootprintSignature(correctFootprint)]);
   const options = [{ footprint: correctFootprint, isCorrect: true }];
 
-  // Create structurally plausible distractors (mirror, rotate, or move 1 block)
+  // Create structurally plausible same-area distractors first (mirror, rotate, transpose, 1-cell slide)
   const candidates = [
     // Horizontal flip
     correctFootprint.map((row) => [...row].reverse()),
@@ -168,7 +171,25 @@ function makeTopViewDistractors(grid) {
     ),
   ];
 
-  // Add single-cell mutations
+  // Add same-area 1-block slide mutations so distractors match the exact footprint square count!
+  const filled = [];
+  const empty = [];
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      if (correctFootprint[r][c]) filled.push([r, c]);
+      else empty.push([r, c]);
+    }
+  }
+  for (let i = 0; i < 24 && filled.length > 0 && empty.length > 0; i++) {
+    const [fr, fc] = filled[randInt(0, filled.length - 1)];
+    const [er, ec] = empty[randInt(0, empty.length - 1)];
+    const slid = correctFootprint.map((row) => [...row]);
+    slid[fr][fc] = 0;
+    slid[er][ec] = 1;
+    if (isConnected(slid)) candidates.push(slid);
+  }
+
+  // Fallback single-cell toggle mutations if still short
   for (let i = 0; i < 20; i++) {
     const mutated = correctFootprint.map((row) => [...row]);
     const r1 = randInt(0, n - 1);
@@ -252,7 +273,7 @@ export function generateSession(tier = 1, profile = null) {
           'Imagine flying directly above the tower. Only look at WHICH floor squares have at least one block—height does not change the footprint!',
       });
     } else {
-      const choices = makeNumericChoices(struct.total, 4, 2, tier === 1 ? 3 : 4);
+      const choices = makeNumericChoices(struct.total, 4, 2, tier === 4 ? 3 : tier === 1 ? 3 : 4);
       const layerBreakdown = layers.map((cnt, idx) => `Layer ${idx + 1}: ${cnt}`).join(' · ');
       rounds.push({
         kind: 'count',

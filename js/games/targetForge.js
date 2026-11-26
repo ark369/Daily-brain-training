@@ -36,7 +36,7 @@ function makeUniqueCards(required, totalCount, minV, maxV) {
 }
 
 function makeBondRound() {
-  const target = randInt(6, 17);
+  const target = randInt(6, 14);
   const a = randInt(2, Math.floor(target / 2));
   const b = target - a;
   const cards = makeUniqueCards([a, b], 5, 1, Math.max(9, target - 1));
@@ -93,10 +93,10 @@ function makeAddSubRound() {
 }
 
 function makeFactorRound() {
-  const a = randInt(3, 9);
-  const b = randInt(4, 9);
+  const a = randInt(4, 9);
+  const b = randInt(5, 9);
   const target = a * b;
-  const cards = makeUniqueCards([a, b], 5, 2, 12);
+  const cards = makeUniqueCards([a, b], 5, 3, 12);
   return {
     kind: 'two-card',
     ops: ['×'],
@@ -111,19 +111,83 @@ function makeFactorRound() {
   };
 }
 
-function makeThreeCardRound(tier) {
-  const a = randInt(2, tier >= 4 ? 9 : 7);
-  const b = randInt(3, tier >= 4 ? 9 : 7);
-  const c = randInt(2, tier >= 4 ? 12 : 9);
-  const op2 = pickOne(['+', '−']);
+function makeThreeCardRound(tier, preferredPattern = null) {
+  if (tier >= 4) {
+    const pattern = preferredPattern || pickOne(['mulAddSub', 'addThenMul', 'subThenMul']);
+    if (pattern === 'addThenMul') {
+      const a = randInt(4, 11);
+      const b = randInt(4, 10);
+      const c = randInt(4, 9);
+      const target = (a + b) * c;
+      const cards = makeUniqueCards([a, b, c], 5, 3, 14);
+      return {
+        kind: 'three-card',
+        ops: ['+', '−', '×'],
+        defaultOp: '+',
+        target,
+        cards,
+        sampleSolution: `(${a} + ${b}) × ${c} = ${target}`,
+        signature: `tf4:am:${target}:${Math.min(a, b)}+${Math.max(a, b)}x${c}`,
+        prompt: `Forge ${target} using 3 cards!`,
+        speakPrompt: `Build a three-card expression using parentheses and plus, minus, or times to make ${target}!`,
+        strategyTip: `Check which card divides evenly into ${target} — then add two cards inside the parentheses to make the other factor!`,
+      };
+    }
+    if (pattern === 'subThenMul') {
+      const b = randInt(3, 9);
+      const diff = randInt(5, 9);
+      const a = b + diff;
+      const c = randInt(6, 10);
+      const target = (a - b) * c;
+      const cards = makeUniqueCards([a, b, c], 5, 3, Math.max(15, a + 2));
+      return {
+        kind: 'three-card',
+        ops: ['+', '−', '×'],
+        defaultOp: '+',
+        target,
+        cards,
+        sampleSolution: `(${a} − ${b}) × ${c} = ${target}`,
+        signature: `tf4:sm:${target}:${a}-${b}x${c}`,
+        prompt: `Forge ${target} using 3 cards!`,
+        speakPrompt: `Build a three-card expression using parentheses and plus, minus, or times to make ${target}!`,
+        strategyTip: `Find a factor of ${target} on the outside, then subtract two cards inside the parentheses to build the other factor!`,
+      };
+    }
+    // mulAddSub with genuine 11+ magnitudes (target >= 28)
+    const a = randInt(5, 11);
+    const b = randInt(5, 9);
+    const c = randInt(3, 14);
+    const prod = a * b;
+    const op2 = prod - c >= 28 && Math.random() < 0.5 ? '−' : '+';
+    const target = op2 === '+' ? prod + c : prod - c;
+    const cards = makeUniqueCards([a, b, c], 5, 3, Math.max(14, c + 2));
+    return {
+      kind: 'three-card',
+      ops: ['+', '−', '×'],
+      defaultOp: '+',
+      target,
+      cards,
+      sampleSolution: `(${a} × ${b}) ${op2} ${c} = ${target}`,
+      signature: `tf4:ms:${target}:${Math.min(a, b)}x${Math.max(a, b)}${op2}${c}`,
+      prompt: `Forge ${target} using 3 cards!`,
+      speakPrompt: `Build a three-card equation using plus, minus, or times to make ${target}!`,
+      strategyTip: `Try multiplying two cards to land close to ${target}, then add or subtract the third card!`,
+    };
+  }
+
+  // Tier 3: approachable 3-card combo (a × b) ± c with target >= 18
+  const a = randInt(4, 8);
+  const b = randInt(4, 8);
+  const c = randInt(2, 9);
   const prod = a * b;
-  const actualOp2 = op2 === '−' && prod <= c + 2 ? '+' : op2;
+  const actualOp2 = prod - c >= 18 && Math.random() < 0.45 ? '−' : '+';
   const target = actualOp2 === '+' ? prod + c : prod - c;
   const cards = makeUniqueCards([a, b, c], 5, 2, Math.max(11, c + 2));
 
   return {
     kind: 'three-card',
     ops: ['+', '−', '×'],
+    defaultOp: '+',
     target,
     cards,
     sampleSolution: `(${a} × ${b}) ${actualOp2} ${c} = ${target}`,
@@ -148,8 +212,14 @@ export function generateSession(tier = 1, profile = null) {
   const blueprints = {
     1: [makeBondRound, makeBondRound, makeBondRound, makeBondRound, makeBondRound],
     2: [makeAddSubRound, makeAddSubRound, makeAddSubRound, makeAddSubRound, makeAddSubRound],
-    3: [makeFactorRound, () => makeThreeCardRound(3), makeFactorRound, () => makeThreeCardRound(3), makeFactorRound],
-    4: [() => makeThreeCardRound(4), makeFactorRound, () => makeThreeCardRound(4), () => makeThreeCardRound(4), () => makeThreeCardRound(4)],
+    3: [makeFactorRound, () => makeThreeCardRound(3), makeFactorRound, () => makeThreeCardRound(3), () => makeThreeCardRound(3)],
+    4: [
+      () => makeThreeCardRound(4, 'mulAddSub'),
+      () => makeThreeCardRound(4, 'addThenMul'),
+      () => makeThreeCardRound(4, 'subThenMul'),
+      () => makeThreeCardRound(4, 'mulAddSub'),
+      () => makeThreeCardRound(4, 'addThenMul'),
+    ],
   };
 
   const rounds = (blueprints[tier] || blueprints[4]).map((fn) => {
@@ -176,7 +246,7 @@ export function generateSession(tier = 1, profile = null) {
 export function renderRound(container, round, callbacks) {
   const isThree = round.kind === 'three-card';
   let slots = isThree ? [null, null, null] : [null, null]; // card indices into round.cards
-  let op1 = round.defaultOp || '×';
+  let op1 = round.defaultOp || '+';
   let op2 = '+';
   let solved = false;
   let hadMistake = false;

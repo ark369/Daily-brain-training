@@ -185,16 +185,17 @@ function makeCompareRound(tier) {
 }
 
 function makeMissingWeightRound(tier) {
-  const total = tier === 1 ? randInt(5, 12) : randInt(10, 24);
-  const minKnown = tier === 1 ? 1 : 2;
+  const total = tier === 1 ? randInt(5, 10) : randInt(11, 24);
+  const minKnown = tier === 1 ? 1 : 3;
   let known = randInt(minKnown, total - minKnown);
   let missing = total - known;
 
   let fullPan;
-  if (tier === 1 && (total <= 7 || Math.random() < 0.55)) {
+  if (tier === 1) {
+    // Tier 1 (ages 5–6): clean single total weight on the full pan
     fullPan = [{ type: 'num', value: total }];
   } else {
-    const minPart = tier === 1 ? 2 : 3;
+    const minPart = 3;
     let partA = randInt(minPart, total - minPart);
     let partB = total - partA;
     // Avoid trivial identity like [6, 5] vs [6, ?] so kids actually compute the sum
@@ -307,9 +308,13 @@ function makeVisualAlgebraRound(tier = 3, preferredKind = null) {
 function makeCancelBothSidesRound(tier = 3, preferredKind = null) {
   const shapeKind = preferredKind || pickOne(ALL_KINDS);
   const info = WEIGHT_ITEMS[shapeKind];
-  const extraShapes = tier >= 4 ? pickOne([1, 2]) : Math.random() < 0.7 ? 1 : 2;
-  const xVal = tier >= 4 ? randInt(4, 12) : randInt(3, 10);
-  const smallNum = extraShapes === 2 && tier === 3 ? 0 : randInt(1, tier >= 4 ? 10 : 7);
+  // Tier 4 always requires multi-step cancellation + division while staying <= 4 items per pan:
+  // 70%: 3x + smallNum = x + bigNum (cancel x, cancel smallNum, ÷2)
+  // 30%: 4x = x + bigNum (cancel x, ÷3 with larger xVal)
+  const useThreeDiv = tier >= 4 && Math.random() < 0.3;
+  const extraShapes = tier >= 4 ? (useThreeDiv ? 3 : 2) : Math.random() < 0.65 ? 1 : 2;
+  const xVal = tier >= 4 ? (useThreeDiv ? randInt(7, 15) : randInt(5, 14)) : randInt(3, 10);
+  const smallNum = tier >= 4 ? (useThreeDiv ? 0 : randInt(3, 14)) : extraShapes === 2 ? 0 : randInt(1, 7);
   const bigNum = smallNum + extraShapes * xVal;
 
   const sideA = [
@@ -354,7 +359,7 @@ function makeCancelBothSidesRound(tier = 3, preferredKind = null) {
     signature: `cancel:${extraShapes}:${xVal}:${smallNum}`,
     scales: [{ left, right, tilt: 0 }],
     cancelSteps,
-    choices: makeNumericChoices(xVal, 4, 1, 4),
+    choices: makeNumericChoices(xVal, 4, 1, tier >= 4 ? 3 : 4),
     answer: xVal,
     prompt: `The scale is balanced! How much does 1 ${info.short} weigh?`,
     speakPrompt: `Both pans have ${info.plural}! Try removing one ${info.short} from each pan to see what is left. How much does 1 ${info.short} weigh?`,
@@ -366,13 +371,20 @@ function makeTwoScaleSystemRound(tier = 4) {
   const [kindA, kindB] = shuffle(ALL_KINDS).slice(0, 2);
   const infoA = WEIGHT_ITEMS[kindA];
   const infoB = WEIGHT_ITEMS[kindB];
-  const valA = randInt(2, tier >= 4 ? 9 : 7);
-  const valB = randInt(2, tier >= 4 ? 10 : 8);
-  const countA = pickOne(tier >= 4 ? [2, 3, 4] : [2, 3]);
-  const countB = tier === 3 ? pickOne([1, 2]) : pickOne([1, 2, 3]);
+  const valA = randInt(tier >= 4 ? 4 : 2, tier >= 4 ? 11 : 7);
+  const valB = randInt(tier >= 4 ? 4 : 2, tier >= 4 ? 12 : 8);
+  const countA = pickOne([2, 3]);
+  // Tier 4 always requires solving Scale 1 with an offset AND Scale 2 with countB >= 2 (kept <= 4 items/pan!)
+  const extraA = tier >= 4 ? randInt(3, 11) : 0;
+  const countB = tier >= 4 ? pickOne([2, 3]) : pickOne([1, 2]);
+  const countAInS2 = tier >= 4 ? (countB === 3 ? 1 : pickOne([1, 2])) : 1;
 
-  const s1Shapes = Array.from({ length: countA }, () => ({ type: 'shape', kind: kindA }));
-  const s1Num = [{ type: 'num', value: countA * valA }];
+  const s1Shapes = [
+    ...Array.from({ length: countA }, () => ({ type: 'shape', kind: kindA })),
+    ...(extraA > 0 ? [{ type: 'num', value: extraA }] : []),
+  ];
+  const s1Total = countA * valA + extraA;
+  const s1Num = [{ type: 'num', value: s1Total }];
   const flip1 = Math.random() < 0.35;
   const scale1 = {
     left: flip1 ? s1Num : s1Shapes,
@@ -381,10 +393,10 @@ function makeTwoScaleSystemRound(tier = 4) {
   };
 
   const s2Shapes = [
-    { type: 'shape', kind: kindA },
+    ...Array.from({ length: countAInS2 }, () => ({ type: 'shape', kind: kindA })),
     ...Array.from({ length: countB }, () => ({ type: 'shape', kind: kindB })),
   ];
-  const s2Total = valA + countB * valB;
+  const s2Total = countAInS2 * valA + countB * valB;
   const s2Num = [{ type: 'num', value: s2Total }];
   const flip2 = Math.random() < 0.35;
   const scale2 = {
@@ -393,20 +405,25 @@ function makeTwoScaleSystemRound(tier = 4) {
     tilt: 0,
   };
 
+  const s1Hint =
+    extraA > 0
+      ? `Scale 1: ${s1Total} − ${extraA} = ${countA * valA}, ÷ ${countA} → 1 ${infoA.short} = ${valA}.`
+      : `Scale 1: ${countA} ${infoA.plural} = ${s1Total}, so 1 ${infoA.short} = ${valA}.`;
+  const aContrib = countAInS2 * valA;
   const bStep =
     countB === 1
-      ? `${s2Total} − ${valA} = ${valB}!`
-      : `${s2Total} − ${valA} = ${countB * valB}, then divide by ${countB} → ${valB}!`;
+      ? `${s2Total} − ${aContrib} = ${valB}!`
+      : `${s2Total} − ${aContrib} = ${countB * valB}, then ÷ ${countB} → ${valB}!`;
 
   return {
     kind: 'numeric',
-    signature: `sys:${countA}:${valA}:${countB}:${valB}`,
+    signature: `sys:${countA}:${valA}:${extraA}:${countAInS2}:${countB}:${valB}`,
     scales: [scale1, scale2],
-    choices: makeNumericChoices(valB, 4, 1, 4),
+    choices: makeNumericChoices(valB, 4, 1, tier >= 4 ? 3 : 4),
     answer: valB,
     prompt: `Both scales are balanced! How much does 1 ${infoB.short} weigh?`,
     speakPrompt: `Both scales are balanced. Use the top scale to find the ${infoA.short} first, then solve for 1 ${infoB.short}.`,
-    strategyTip: `From Scale 1: ${countA} ${infoA.plural} = ${countA * valA}, so 1 ${infoA.short} = ${valA}. Plug ${valA} into Scale 2: ${bStep}`,
+    strategyTip: `${s1Hint} Plug into Scale 2: ${bStep}`,
   };
 }
 
@@ -450,16 +467,16 @@ export function generateSession(tier = 1, profile = null) {
     3: [
       () => makeVisualAlgebraRound(3, nextShape()),
       () => makeCancelBothSidesRound(3, nextShape()),
-      () => makeCompareRound(3),
       () => makeVisualAlgebraRound(3, nextShape()),
       () => makeTwoScaleSystemRound(3),
+      () => makeCancelBothSidesRound(3, nextShape()),
     ],
     4: [
       () => makeTwoScaleSystemRound(4),
       () => makeCancelBothSidesRound(4, nextShape()),
-      () => makeVisualAlgebraRound(4, nextShape()),
       () => makeTwoScaleSystemRound(4),
       () => makeCancelBothSidesRound(4, nextShape()),
+      () => makeTwoScaleSystemRound(4),
     ],
   };
 

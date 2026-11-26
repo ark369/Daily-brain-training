@@ -107,9 +107,14 @@ function transformNet(cells) {
   return out.map(([r, c]) => [r - minR, c - minC]);
 }
 
-function makeCubeNetValidRound() {
+const HARD_VALID_NETS = VALID_CUBE_NETS.filter((n) => !['Cross-1', 'Cross-2'].includes(n.name));
+const HARD_INVALID_NETS = INVALID_CUBE_NETS.filter((n) => !['Block-2x3', 'Long-5'].includes(n.name));
+
+function makeCubeNetValidRound(tier = 3) {
   const isValid = Math.random() < 0.55;
-  const pick = pickOne(isValid ? VALID_CUBE_NETS : INVALID_CUBE_NETS);
+  const validPool = tier >= 4 ? HARD_VALID_NETS : VALID_CUBE_NETS;
+  const invalidPool = tier >= 4 ? HARD_INVALID_NETS : INVALID_CUBE_NETS;
+  const pick = pickOne(isValid ? validPool : invalidPool);
   const cells = transformNet(pick.cells);
   return {
     kind: 'cube-net-valid',
@@ -124,8 +129,8 @@ function makeCubeNetValidRound() {
   };
 }
 
-function makeCubeNetOppositeRound() {
-  const pick = pickOne(VALID_CUBE_NETS);
+function makeCubeNetOppositeRound(tier = 3) {
+  const pick = pickOne(tier >= 4 ? HARD_VALID_NETS : VALID_CUBE_NETS);
   const cells = transformNet(pick.cells);
   // Rotate array order so the ★ Star lands on a random face (index 0)
   const starIdx = randInt(0, 5);
@@ -151,7 +156,7 @@ function makeCubeNetOppositeRound() {
 }
 
 // =========================================================================
-// Mode A: Constructive 2D Mosaic / Tangram Tiling (Tiers 1–3)
+// Mode A: Constructive 2D Mosaic / Tangram Tiling (Tiers 1–4)
 // =========================================================================
 const PIECE_COLORS = [
   { fill: '#2E9690', stroke: '#1B615D' }, // Teal
@@ -173,6 +178,9 @@ const PIECE_SHAPES = {
   t4: [[0, 0], [0, 1], [0, 2], [1, 1]],
   l4: [[0, 0], [1, 0], [2, 0], [2, 1]],
   z4: [[0, 0], [0, 1], [1, 1], [1, 2]],
+  p5: [[0, 0], [0, 1], [1, 0], [1, 1], [2, 0]],
+  u5: [[0, 0], [0, 2], [1, 0], [1, 1], [1, 2]],
+  f5: [[0, 1], [0, 2], [1, 0], [1, 1], [2, 1]],
 };
 
 function normP(cells) {
@@ -188,18 +196,23 @@ function rotP90(cells) {
 }
 
 function makeTileFitRound(tier) {
-  const rows = tier === 1 ? 3 : 4;
-  const cols = tier === 1 ? 3 : 4;
-  const targetPieces = tier === 1 ? 2 : 3;
+  const rows = tier === 1 ? 3 : tier >= 4 ? 5 : 4;
+  const cols = tier === 1 ? 3 : tier >= 4 ? 5 : 4;
+  const targetPieces = tier === 1 ? 2 : tier === 2 ? 3 : 4;
   const allowRotate = tier >= 2;
+  const minArea = tier === 1 ? 5 : tier === 2 ? 8 : tier === 3 ? 11 : 15;
 
   const shapePool =
     tier === 1
       ? ['dominoH', 'dominoV', 'sq2', 'l3a', 'l3b', 'l3c', 'l3d', 'bar3H', 'bar3V']
-      : ['dominoH', 'bar3H', 'sq2', 'l3a', 'l3b', 't4', 'l4', 'z4'];
+      : tier === 2
+        ? ['dominoH', 'bar3H', 'sq2', 'l3a', 'l3b', 't4', 'l4', 'z4']
+        : tier === 3
+          ? ['bar3H', 'l3a', 'l3b', 'sq2', 't4', 'l4', 'z4']
+          : ['t4', 'l4', 'z4', 'sq2', 'p5', 'u5', 'f5'];
 
-  // Constructively place 2–3 non-overlapping touching pieces to form a guaranteed-solvable silhouette!
-  for (let attempt = 0; attempt < 120; attempt++) {
+  // Constructively place 2–4 non-overlapping touching pieces to form a guaranteed-solvable silhouette!
+  for (let attempt = 0; attempt < 180; attempt++) {
     const occupied = new Map();
     const placed = [];
 
@@ -229,7 +242,7 @@ function makeTileFitRound(tier) {
       chosenAbs.forEach(([r, c]) => occupied.set(`${r},${c}`, p));
       // For Tier 2+ allowRotate, scramble initial piece orientation in the tray!
       let trayCells = pieceCells;
-      if (allowRotate && Math.random() < 0.65) {
+      if (allowRotate && Math.random() < (tier >= 4 ? 0.85 : 0.65)) {
         const scr = randInt(1, 3);
         for (let t = 0; t < scr; t++) trayCells = rotP90(trayCells);
       }
@@ -240,7 +253,7 @@ function makeTileFitRound(tier) {
       });
     }
 
-    if (placed.length === targetPieces && occupied.size >= (tier === 1 ? 5 : 8)) {
+    if (placed.length === targetPieces && occupied.size >= minArea) {
       const targetCells = Array.from(occupied.keys()).map((k) => k.split(',').map(Number));
       // Trim bounding box tightly
       const minR = Math.min(...targetCells.map(([r]) => r));
@@ -303,23 +316,23 @@ export function generateSession(tier = 1, profile = null) {
     2: [
       () => makeTileFitRound(2),
       () => makeTileFitRound(2),
-      () => makeCubeNetValidRound(),
+      () => makeTileFitRound(2),
       () => makeTileFitRound(2),
       () => makeTileFitRound(2),
     ],
     3: [
       () => makeTileFitRound(3),
-      () => makeCubeNetValidRound(),
-      () => makeCubeNetOppositeRound(),
-      () => makeCubeNetValidRound(),
-      () => makeCubeNetOppositeRound(),
+      () => makeCubeNetValidRound(3),
+      () => makeCubeNetOppositeRound(3),
+      () => makeTileFitRound(3),
+      () => makeCubeNetValidRound(3),
     ],
     4: [
-      () => makeCubeNetValidRound(),
-      () => makeCubeNetOppositeRound(),
+      () => makeCubeNetOppositeRound(4),
+      () => makeCubeNetValidRound(4),
       () => makeTileFitRound(4),
-      () => makeCubeNetOppositeRound(),
-      () => makeCubeNetValidRound(),
+      () => makeCubeNetOppositeRound(4),
+      () => makeCubeNetValidRound(4),
     ],
   };
 

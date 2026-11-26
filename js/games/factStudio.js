@@ -36,10 +36,10 @@ function buildWarmupPool(tier) {
   const pool = [];
 
   if (tier === 1) {
-    // Procedural Make-10 (sums 11–17) & Doubles (4+4 through 9+9) with Ten-Frame visuals
+    // Procedural Make-10 (sums 11–15) & Doubles (3+3 through 8+8) with Ten-Frame visuals
     for (let a = 6; a <= 9; a++) {
-      for (let b = 2; b <= a; b++) {
-        if (a + b >= 11 && a + b <= 17 && a !== b) {
+      for (let b = 2; b <= Math.min(6, a - 1); b++) {
+        if (a + b >= 11 && a + b <= 15) {
           const need = 10 - a;
           const rem = b - need;
           pool.push({
@@ -52,7 +52,7 @@ function buildWarmupPool(tier) {
         }
       }
     }
-    for (let d = 4; d <= 9; d++) {
+    for (let d = 3; d <= 8; d++) {
       const tip =
         d <= 5
           ? `Doubles! Two equal groups of ${d} make ${d + d}.`
@@ -69,17 +69,28 @@ function buildWarmupPool(tier) {
   }
 
   if (tier === 2) {
-    // Procedural Split-Array multiplication warm-ups (2s–6s × 4, 6, 7, 8, 9)
+    // Aligned with Tier 2 curriculum: Bridge-10 addition (sums 13–17) + foundational 2,3,4,5 multiplication arrays
+    for (const [a, b] of [[8, 6], [8, 7], [9, 6], [9, 7], [9, 8], [7, 6], [7, 5], [8, 5]]) {
+      const need = 10 - a;
+      const rem = b - need;
+      pool.push({
+        factKey: `${a}+${b}`,
+        equation: `${a} + ${b} = ?`,
+        answer: a + b,
+        visual: { type: 'tenframe', a, b },
+        strategyTip: `Bridge through 10! Take ${need} from ${b} to make 10, plus ${rem} left → ${a + b}.`,
+      });
+    }
     const splits = [
       { cols: 4, splitA: 2, splitB: 2, makeTip: (r) => `Double-double! (2 × ${r}) = ${2 * r}, double it → ${4 * r}!` },
       { cols: 6, splitA: 5, splitB: 1, makeTip: (r) => `Split 6 × ${r} into (5 × ${r}) + (1 × ${r}) = ${5 * r} + ${r} = ${6 * r}!` },
       { cols: 7, splitA: 5, splitB: 2, makeTip: (r) => `Split 7 × ${r} into (5 × ${r}) + (2 × ${r}) = ${5 * r} + ${2 * r} = ${7 * r}!` },
       { cols: 8, splitA: 5, splitB: 3, makeTip: (r) => `Split 8 × ${r} into (5 × ${r}) + (3 × ${r}) = ${5 * r} + ${3 * r} = ${8 * r}!` },
-      { cols: 9, splitA: 5, splitB: 4, makeTip: (r) => `Think (10 × ${r}) − ${r} = ${10 * r} − ${r} = ${9 * r}, or (5 × ${r}) + (4 × ${r})!` },
+      { cols: 9, splitA: 5, splitB: 4, makeTip: (r) => `Think (10 × ${r}) − ${r} = ${10 * r} − ${r} = ${9 * r}!` },
     ];
-    for (let rows = 2; rows <= 6; rows++) {
+    for (let rows = 2; rows <= 5; rows++) {
       for (const s of splits) {
-        if (s.cols * rows > 54) continue;
+        if (s.cols * rows > 45) continue;
         pool.push({
           factKey: `${s.cols}x${rows}`,
           equation: `${s.cols} × ${rows} = ?`,
@@ -116,9 +127,9 @@ function buildWarmupPool(tier) {
     return pool;
   }
 
-  // Tier 4: Procedural mental decomposition across 4 real strategies (~40 items)
-  for (const a of [12, 13, 14, 15, 16, 17, 18, 19]) {
-    for (const b of [4, 6, 7, 8]) {
+  // Tier 4: Uniformly 11+ mental decomposition shortcuts (~44 items, zero easy 12x4 or 49+36!)
+  for (const a of [13, 14, 15, 16, 17, 18, 19]) {
+    for (const b of [6, 7, 8, 9]) {
       const ones = a - 10;
       pool.push({
         factKey: `${a}x${b}`,
@@ -129,7 +140,7 @@ function buildWarmupPool(tier) {
       });
     }
   }
-  for (const even of [14, 16, 18, 22, 24, 26, 28, 34]) {
+  for (const even of [18, 24, 26, 28, 34, 36, 38, 46]) {
     pool.push({
       factKey: `${even}x5`,
       equation: `${even} × 5 = ?`,
@@ -138,15 +149,22 @@ function buildWarmupPool(tier) {
       strategyTip: `Half of ${even} is ${even / 2}; times 10 is ${even * 5}!`,
     });
   }
+  for (const mult4 of [8, 12, 16, 20, 24]) {
+    pool.push({
+      factKey: `25x${mult4}`,
+      equation: `25 × ${mult4} = ?`,
+      answer: 25 * mult4,
+      visual: { type: 'text', label: `Divide ${mult4} by 4, then × 100` },
+      strategyTip: `Since 25 × 4 = 100, compute (${mult4} ÷ 4) × 100 = ${mult4 / 4} × 100 = ${25 * mult4}!`,
+    });
+  }
   for (const [base, adj, add] of [
-    [99, 1, 37],
-    [99, 1, 48],
-    [99, 1, 64],
-    [98, 2, 45],
-    [98, 2, 57],
-    [49, 1, 36],
-    [49, 1, 58],
-    [199, 1, 43],
+    [99, 1, 57],
+    [99, 1, 78],
+    [98, 2, 65],
+    [98, 2, 87],
+    [199, 1, 46],
+    [198, 2, 75],
   ]) {
     const rounded = base + adj;
     pool.push({
@@ -242,17 +260,28 @@ function buildFactPool(tier) {
       }
     }
   } else {
-    // Tier 4: Extended multiplication (up to 12x12), division, and mental arithmetic (~140 unique facts)
-    for (let a = 6; a <= 12; a++) {
-      for (let b = 4; b <= 12; b++) {
+    // Tier 4: Uniformly 11+ multiplication/division (6–12 × 6–12 skipping trivial ×10!), 13–19 × 3–6, & 2-digit mental add/sub
+    const factors = [6, 7, 8, 9, 11, 12];
+    for (const a of factors) {
+      for (const b of factors) {
         add({ factKey: `${a}x${b}`, equation: `${a} × ${b} = ?`, answer: a * b, a, b, op: 'x' });
         add({ factKey: `${a * b}/${a}`, equation: `${a * b} ÷ ${a} = ?`, answer: b, a: a * b, b: a, op: '/' });
       }
     }
+    for (const a of [13, 14, 15, 16, 17, 18, 19]) {
+      for (const b of [3, 4, 6]) {
+        add({ factKey: `${a}x${b}`, equation: `${a} × ${b} = ?`, answer: a * b, a, b, op: 'x' });
+      }
+    }
     for (let i = 0; i < 24; i++) {
-      const a = randInt(24, 89);
-      const b = pickOne([9, 11, 15, 19, 25]);
-      add({ factKey: `${a}+${b}`, equation: `${a} + ${b} = ?`, answer: a + b, a, b, op: '+' });
+      const a = randInt(34, 89);
+      const b = pickOne([17, 19, 25, 28, 29, 35]);
+      if (i % 2 === 0) {
+        add({ factKey: `${a}+${b}`, equation: `${a} + ${b} = ?`, answer: a + b, a, b, op: '+' });
+      } else {
+        const big = Math.max(a, b + 14);
+        add({ factKey: `${big}-${b}`, equation: `${big} − ${b} = ?`, answer: big - b, a: big, b, op: '-' });
+      }
     }
   }
   return Array.from(map.values());

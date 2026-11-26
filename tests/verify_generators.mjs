@@ -128,6 +128,12 @@ for (const game of GAMES) {
 
           if (game.meta.id === 'cube-architect') {
             assert.ok(r.total >= 2, 'Total cubes must be >= 2');
+            if (tier === 4) {
+              assert.equal(r.grid.length, 4, 'Cube Architect T4 must use 4x4 grid');
+              const baseCols = r.grid.flat().filter((h) => h > 0).length;
+              assert.ok(r.total >= 17 && r.total <= 28, `Cube Architect T4 total ${r.total} out of [17, 28]`);
+              assert.ok(r.total - baseCols >= 4, `Cube Architect T4 hidden supports ${r.total - baseCols} must be >= 4`);
+            }
             if (r.kind === 'count') {
               assert.equal(new Set(r.choices).size, 4, 'Choices must be 4 unique numbers');
               assert.ok(r.choices.includes(r.answer), 'Choices must include answer');
@@ -141,18 +147,31 @@ for (const game of GAMES) {
             if (r.kind === 'mirror') {
               assert.equal(r.leftGrid.length, r.rows);
               assert.equal(r.expectedRight.length, r.rows);
+              if (tier === 4) {
+                assert.equal(r.rows, 5, 'Shape Shifter T4 mirror must be 5x5');
+                assert.ok(
+                  r.axis === 'diagonal' || r.axis === 'anti-diagonal',
+                  `Shape Shifter T4 mirror axis must be diagonal/anti-diagonal, got ${r.axis}`
+                );
+              }
               for (let row = 0; row < r.rows; row++) {
                 for (let col = 0; col < r.cols; col++) {
                   if (r.axis === 'horizontal') {
                     assert.equal(r.expectedRight[row][col], r.leftGrid[r.rows - 1 - row][col]);
                   } else if (r.axis === 'diagonal') {
                     if (row > col) assert.equal(r.expectedRight[row][col], r.leftGrid[col][row]);
+                  } else if (r.axis === 'anti-diagonal') {
+                    if (row + col > r.rows - 1) {
+                      assert.equal(r.expectedRight[row][col], r.leftGrid[r.rows - 1 - col][r.rows - 1 - row]);
+                    }
                   } else {
                     assert.equal(r.expectedRight[row][col], r.leftGrid[row][r.cols - 1 - col]);
                   }
                 }
               }
             } else if (r.kind === 'rotate') {
+              if (tier === 3) assert.ok(r.startCells.length >= 5, `T3 rotate shape too small: ${r.shapeName}`);
+              if (tier === 4) assert.ok(r.startCells.length >= 6, `T4 rotate shape too small: ${r.shapeName}`);
               assert.notEqual(cellsSignature(r.startCells), r.targetSig, 'Start shape must not already match target');
               let cur = r.startCells;
               const matches = [];
@@ -172,19 +191,40 @@ for (const game of GAMES) {
           }
 
           if (game.meta.id === 'shape-composer') {
+            if (tier === 2) {
+              assert.equal(r.kind, 'tile-fit', 'Tier 2 Shape Composer must not include 3D cube-net folding');
+            }
             if (r.kind === 'tile-fit') {
               const pieceArea = r.pieces.reduce((s, p) => s + p.cells.length, 0);
               assert.equal(pieceArea, r.targetCells.length, 'Tile-fit pieces area must match silhouette area');
               assert.ok(r.pieces.length >= 2);
+              if (tier === 4) {
+                assert.equal(r.pieces.length, 4, 'Tier 4 Tile-Fit must use 4 pieces');
+                assert.ok(pieceArea >= 15, `Tier 4 Tile-Fit area ${pieceArea} must be >= 15`);
+              }
             } else if (r.kind === 'cube-net-valid') {
               const folded = foldNet3D(r.cells);
               assert.equal(folded.valid, r.isValid, 'Cube net validity must match exact 3D folder');
+              const netName = r.signature.split(':')[1];
+              if (tier === 4) {
+                assert.ok(
+                  !['Cross-1', 'Cross-2', 'Block-2x3', 'Long-5'].includes(netName),
+                  `Tier 4 cube net must exclude trivial net ${netName}`
+                );
+              }
             } else if (r.kind === 'cube-net-opposite') {
               const folded = foldNet3D(r.cells);
               assert.equal(folded.valid, true, 'Opposite-face round must use a valid cube net');
               assert.equal(r.faceLabels[folded.oppositeOf0], r.answer, 'Opposite label must match 3D folder');
               assert.equal(new Set(r.options).size, 4);
               assert.ok(r.options.includes(r.answer));
+              const netName = r.signature.split(':')[1];
+              if (tier === 4) {
+                assert.ok(
+                  !['Cross-1', 'Cross-2'].includes(netName),
+                  `Tier 4 opposite-face net must exclude trivial Cross net ${netName}`
+                );
+              }
             }
           }
 
@@ -192,6 +232,24 @@ for (const game of GAMES) {
             assert.ok(r.target >= r.min && r.target <= r.max, `Target ${r.target} out of [${r.min}, ${r.max}]`);
             assert.notEqual(r.startPos, r.target, `Number line frog must not start right on target (${r.targetLabel})`);
             assert.ok(r.tolerance > 0);
+            if (tier === 3) {
+              assert.notEqual(r.targetLabel, '1/2', 'Tier 3 Number Line must skip trivial 1/2');
+            }
+            if (tier === 4) {
+              assert.ok(['int', 'percent', 'decimal'].includes(r.displayMode), `Unexpected T4 displayMode: ${r.displayMode}`);
+              if (r.displayMode === 'int') {
+                assert.equal(r.min, -15);
+                assert.equal(r.max, 15);
+                assert.ok(r.startPos < 0 || r.target < 0, `T4 integer hop must involve negative numbers (${r.targetLabel})`);
+                assert.ok(!r.targetLabel.includes('-'), `T4 targetLabel should use Unicode minus: ${r.targetLabel}`);
+              } else if (r.displayMode === 'percent') {
+                assert.ok(r.targetLabel.includes('→ ?%'), `T4 percent must require fraction/decimal conversion, got ${r.targetLabel}`);
+              } else if (r.displayMode === 'decimal') {
+                assert.equal(r.min, -2);
+                assert.equal(r.max, 2);
+                assert.ok(r.target < 0, `T4 neg-rational target must be negative, got ${r.target}`);
+              }
+            }
           }
 
           if (game.meta.id === 'fact-studio') {
@@ -199,6 +257,10 @@ for (const game of GAMES) {
             assert.ok(r.fluencyQueue.length >= 50, `Expected >=50 unique fluency items, got ${r.fluencyQueue.length}`);
             if (tier === 1) {
               assert.equal(r.useTimedSprint, false, 'Tier 1 must NEVER use timed sprint');
+              for (const w of r.warmups) assert.ok(w.answer <= 16, `T1 warmup too large: ${w.prompt} = ${w.answer}`);
+            }
+            if (tier === 2) {
+              for (const w of r.warmups) assert.ok(w.answer <= 45, `T2 warmup exceeds T2 curriculum: ${w.prompt} = ${w.answer}`);
             }
             const warmupKeys = new Set(r.warmups.map((w) => w.factKey));
             assert.equal(warmupKeys.size, 3, 'Warm-ups must have 3 unique factKeys');
@@ -214,6 +276,12 @@ for (const game of GAMES) {
             }
             for (const f of r.fluencyQueue) {
               assert.ok(Number.isFinite(f.answer));
+              if (tier === 4) {
+                assert.ok(
+                  !['6x4', '4x6', '24/6', '24/4'].includes(f.factKey) && !/(^|x)10($|x)|\/10$/.test(f.factKey),
+                  `T4 fluency must exclude trivial fact ${f.factKey}`
+                );
+              }
             }
           }
 
@@ -221,8 +289,19 @@ for (const game of GAMES) {
             assert.equal(r.cards.length, 5, 'Target Forge should offer 5 cards');
             assert.ok(Number.isFinite(r.target));
             assert.ok(targetForgeHasSolution(r), `Target Forge round must be solvable (${r.sampleSolution})`);
+            if (tier === 1) {
+              assert.ok(r.target >= 6 && r.target <= 14, `T1 Target Forge bond ${r.target} out of [6, 14]`);
+            }
             if (tier === 2) {
               assert.equal(r.defaultOp, '+', 'Tier 2 Target Forge must default to + (no operator giveaway)');
+            }
+            if (tier === 3 && r.kind === 'two-card') {
+              assert.ok(r.target >= 20, `T3 Factor Forge target ${r.target} must be >= 20`);
+            }
+            if (tier === 4) {
+              assert.equal(r.kind, 'three-card', 'Tier 4 Target Forge must be 100% 3-card expressions');
+              assert.equal(r.defaultOp, '+', 'Tier 4 Target Forge must default to + (no operator giveaway)');
+              assert.ok(r.target >= 28, `T4 Target Forge target ${r.target} must be >= 28`);
             }
           }
 
@@ -230,6 +309,12 @@ for (const game of GAMES) {
             assert.ok(r.scales.length >= 1);
             assert.ok(typeof r.signature === 'string' && r.signature.length > 0, 'Balance Lab round needs signature');
             assert.ok(!r.strategyTip.includes('Berrys') && !r.speakPrompt.includes('Berrys'), 'Must pluralize Berries properly');
+            if (tier === 3) {
+              assert.notEqual(r.kind, 'compare', 'Tier 3 Balance Lab must not serve Tier 1 compare rounds');
+            }
+            if (tier === 4) {
+              assert.ok(!r.signature.startsWith('alg:'), 'Tier 4 Balance Lab must not serve 1-step visualAlgebra rounds');
+            }
             for (const sc of r.scales) {
               assert.ok(sc.left.length >= 1 && sc.left.length <= 4, `Left pan overflow: ${sc.left.length}`);
               assert.ok(sc.right.length >= 1 && sc.right.length <= 4, `Right pan overflow: ${sc.right.length}`);
@@ -248,12 +333,18 @@ for (const game of GAMES) {
             if (r.kind === 'sort-switch' || r.kind === 'sort-bool') {
               assert.equal(r.cards.length, 4);
               assert.ok(r.cards.some((c) => c.switched), 'Must switch rule mid-round');
+              if (tier === 4 && r.kind === 'sort-bool') {
+                assert.ok(r.signature.startsWith('bool4:'), `T4 Rule Switcher Boolean must be bool4, got ${r.signature}`);
+              }
               for (const c of r.cards) {
                 assert.ok(c.color && c.shape && c.count >= 1, 'Every sort card must have color, shape & count');
               }
             } else if (r.kind === 'pattern-number' || r.kind === 'function-machine') {
               assert.ok(r.choices.includes(r.answer));
               assert.equal(new Set(r.choices).size, 4);
+              if (tier === 4 && r.kind === 'pattern-number') {
+                assert.ok(r.signature.startsWith('pn4:'), `T4 Rule Switcher number sequence must be pn4, got ${r.signature}`);
+              }
               if (r.kind === 'function-machine') {
                 assert.equal(r.examples.length, 3);
                 assert.ok(typeof r.ruleLabel === 'string' && r.ruleLabel.length > 0);
@@ -275,11 +366,12 @@ for (const game of GAMES) {
             for (const txt of r.clueTexts) {
               assert.ok(!txt.includes('the Soccer') && !txt.includes('the Tennis') && !txt.includes('the Mars') && !txt.includes('the Teal'), `Awkward article in clue: ${txt}`);
             }
-            if (tier === 4) {
-              assert.ok(
-                r.clues.every((cl) => cl.type !== 'is'),
-                'Tier 4 Clue Grid must be pure deduction (no direct "is" giveaways)'
-              );
+            const isCount = r.clues.filter((cl) => cl.type === 'is').length;
+            if (tier === 1 || tier === 3) {
+              assert.equal(isCount, 1, `Tier ${tier} Clue Grid must have exactly 1 direct anchor clue`);
+            }
+            if (tier === 2 || tier === 4) {
+              assert.equal(isCount, 0, `Tier ${tier} Clue Grid must be pure deduction (0 direct "is" giveaways)`);
             }
           }
 
@@ -328,6 +420,12 @@ for (const game of GAMES) {
         if (game.meta.id === 'balance-lab') {
           const sigs = new Set(rounds.map((r) => r.signature));
           assert.equal(sigs.size, rounds.length, 'Balance Lab must never repeat a puzzle inside a session');
+        }
+        if (game.meta.id === 'rule-switcher' && tier === 4) {
+          const fmRounds = rounds.filter((r) => r.kind === 'function-machine');
+          assert.equal(fmRounds.length, 2, 'Rule Switcher T4 must include 2 Function Machine rounds');
+          const families = new Set(fmRounds.map((r) => r.signature.split(':')[1]));
+          assert.equal(families.size, 2, `Rule Switcher T4 Function Machines must use 2 distinct families, got ${fmRounds.map((r) => r.signature)}`);
         }
       }
     });
@@ -547,6 +645,9 @@ check('All 490 curated WordCraft and Story Detective items pass structural, spac
       assert.ok(r.shuffledOptions.includes(r.answer), `WB ${r.wordKey} answer missing`);
       assert.ok(r.strategyTip && r.strategyTip.length >= 8, `WB ${r.wordKey} tip too short`);
       if (r.kind === 'morpheme') assert.ok(r.parts.includes('?'), `WB ${r.wordKey} missing ? tile`);
+      if (tier === 4) {
+        assert.ok(!/\? \(/.test(r.clue), `WB T4 ${r.wordKey} clue must not leak root meaning: ${r.clue}`);
+      }
     }
 
     for (const r of drainAll(wcMod, tier)) {
@@ -575,6 +676,11 @@ check('All 490 curated WordCraft and Story Detective items pass structural, spac
       assert.ok(r.shuffledOptions.includes(r.answer), `SD ${r.id} answer missing`);
       if (r.before) assert.match(r.before, /[\s“"‘'(]$/, `SD ${r.id} before spacing`);
       if (r.after) assert.match(r.after, /^[\s.,!?;:’'"”)]/, `SD ${r.id} after spacing`);
+      const ansLow = r.answer.toLowerCase();
+      const titleTokens = r.title.toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(Boolean);
+      const ansStem = ansLow.length >= 5 ? ansLow.slice(0, 5) : null;
+      const leaks = titleTokens.some((tok) => tok === ansLow || (ansStem && tok.length >= 5 && tok.startsWith(ansStem)));
+      assert.equal(leaks, false, `SD ${r.id} title "${r.title}" leaks answer "${r.answer}"!`);
     }
   }
 

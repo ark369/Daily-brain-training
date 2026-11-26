@@ -106,13 +106,13 @@ function makeMysteryRound(tier) {
   // Build candidate clues that are strictly true under `truth`
   const candidates = [];
   for (let c = 0; c < n; c++) {
-    // Direct clues allowed in Tiers 1–3 (max 1 in T2–T3; 0 in T4 pure deduction!)
-    if (tier <= 3) {
-      candidates.push({ type: 'is', c, item: truth[c], weight: tier === 1 ? 1 : 3 });
+    // Direct anchor clues ONLY in Tier 1 (3x3 starter) and Tier 3 (4x4 intro) — pure deduction in Tier 2 (3x3) and Tier 4 (4x4)!
+    if (tier === 1 || tier === 3) {
+      candidates.push({ type: 'is', c, item: truth[c], weight: 1 });
     }
     for (let it = 0; it < n; it++) {
       if (truth[c] !== it) {
-        candidates.push({ type: 'not', c, item: it, weight: 2 });
+        candidates.push({ type: 'not', c, item: it, weight: tier >= 4 ? 3 : 2 });
       }
     }
   }
@@ -133,18 +133,27 @@ function makeMysteryRound(tier) {
   // Greedily pick clues that cut down remaining valid permutations until EXACTLY 1 solution remains!
   const chosen = [];
   let directCount = 0;
-  const maxDirect = tier === 1 ? 1 : tier === 2 ? 1 : tier === 3 ? 1 : 0;
+  const maxDirect = tier === 1 || tier === 3 ? 1 : 0;
 
   let remaining = (n === 3 ? PERMS_3 : PERMS_4).slice();
   const shuffledCands = shuffle(candidates).sort((a, b) => a.weight - b.weight);
 
-  // Give Tier 1 a crisp anchor clue first so a 5-year-old has an instant foothold
-  if (tier === 1) {
+  // Give Tier 1 (3x3) and Tier 3 (4x4 intro) one crisp anchor clue so T3 never collapses into T4 pure-deduction difficulty
+  if (tier === 1 || tier === 3) {
     const firstIs = shuffledCands.find((c) => c.type === 'is');
     if (firstIs) {
       chosen.push(firstIs);
       directCount += 1;
       remaining = remaining.filter((p) => satisfiesClue(p, firstIs));
+    }
+  }
+
+  // For Tier 4, seed with a compound either/neither clue first so every 11+ puzzle guarantees rich relational deduction
+  if (tier >= 4) {
+    const firstCompound = shuffledCands.find((c) => c.type === 'either' || c.type === 'neither');
+    if (firstCompound) {
+      chosen.push(firstCompound);
+      remaining = remaining.filter((p) => satisfiesClue(p, firstCompound));
     }
   }
 
@@ -158,7 +167,7 @@ function makeMysteryRound(tier) {
       if (chosen.includes(cand)) continue;
       const nextRem = remaining.filter((p) => satisfiesClue(p, cand));
       const drop = remaining.length - nextRem.length;
-      if (drop > bestDrop && (nextRem.length >= 1)) {
+      if (drop > bestDrop && nextRem.length >= 1) {
         bestDrop = drop;
         best = cand;
         if (drop >= Math.ceil(remaining.length / 2)) break;
@@ -170,8 +179,9 @@ function makeMysteryRound(tier) {
     remaining = remaining.filter((p) => satisfiesClue(p, best));
   }
 
-  // Prune any redundant clue while keeping count === 1
+  // Prune any redundant clue while keeping count === 1 (and preserving the anchor clue on T1/T3)
   for (let i = chosen.length - 1; i >= 0; i--) {
+    if ((tier === 1 || tier === 3) && chosen[i].type === 'is') continue;
     const without = chosen.filter((_, idx) => idx !== i);
     if (without.length >= 2 && countValidAssignments(without, n) === 1) {
       chosen.splice(i, 1);

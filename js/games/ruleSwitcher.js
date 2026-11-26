@@ -67,42 +67,48 @@ function buildBooleanRulePool(tier) {
   const colorMap = Object.fromEntries(COLORS.map((c) => [c.id, c.label]));
   const shapeMap = Object.fromEntries(SHAPES.map((s) => [s.id, s.label]));
 
-  // 1. Color AND Shape (9 rules)
-  for (const c of COLORS) {
-    for (const s of SHAPES) {
+  if (tier === 2) {
+    // Tier 2 (Ages 7–8): Clean 2-attribute AND / OR rules
+    for (const c of COLORS) {
+      for (const s of SHAPES) {
+        pool.push({
+          id: `and-${c.id}-${s.id}`,
+          label: `${c.label} AND ${s.label}`,
+          test: (card) => card.color === c.id && card.shape === s.id,
+          tip: `BOTH must be true: ${c.label} AND a ${s.label}.`,
+        });
+      }
+      for (const cnt of [1, 2, 3]) {
+        const cntLbl = cnt === 1 ? '1 shape' : `${cnt} shapes`;
+        pool.push({
+          id: `or-${c.id}-${cnt}`,
+          label: `${c.label} OR has ${cntLbl}`,
+          test: (card) => card.color === c.id || card.count === cnt,
+          tip: `EITHER works: ${c.label} (any count) OR ${cntLbl} (any color)!`,
+        });
+      }
+    }
+    return pool;
+  }
+
+  if (tier === 3) {
+    // Tier 3 (Ages 9–10): Negation (NOT), Parity (Odd), and Multi-Attribute Disjunction (excludes easy T2 Color AND Shape)
+    for (const c of COLORS) {
+      for (const s of SHAPES) {
+        pool.push({
+          id: `notc-${c.id}-${s.id}`,
+          label: `NOT ${c.label}, AND ${s.label}`,
+          test: (card) => card.color !== c.id && card.shape === s.id,
+          tip: `Check both: skip ${c.label}, and make sure it is a ${s.label}.`,
+        });
+      }
       pool.push({
-        id: `and-${c.id}-${s.id}`,
-        label: `${c.label} AND ${s.label}`,
-        test: (card) => card.color === c.id && card.shape === s.id,
-        tip: `BOTH must be true: ${c.label} AND a ${s.label}.`,
+        id: `nots-or-${c.id}`,
+        label: `NOT ${colorMap[c.id]} OR has 2 shapes`,
+        test: (card) => card.color !== c.id || card.count === 2,
+        tip: `Matches if it is NOT ${colorMap[c.id]}, OR if it has exactly 2 shapes!`,
       });
     }
-  }
-  // 2. Color OR Count (9 rules)
-  for (const c of COLORS) {
-    for (const cnt of [1, 2, 3]) {
-      const cntLbl = cnt === 1 ? '1 shape' : `${cnt} shapes`;
-      pool.push({
-        id: `or-${c.id}-${cnt}`,
-        label: `${c.label} OR has ${cntLbl}`,
-        test: (card) => card.color === c.id || card.count === cnt,
-        tip: `EITHER works: ${c.label} (any count) OR ${cntLbl} (any color)!`,
-      });
-    }
-  }
-  // 3. NOT Color AND Shape (9 rules)
-  for (const c of COLORS) {
-    for (const s of SHAPES) {
-      pool.push({
-        id: `notc-${c.id}-${s.id}`,
-        label: `NOT ${c.label}, AND ${s.label}`,
-        test: (card) => card.color !== c.id && card.shape === s.id,
-        tip: `Check both: skip ${c.label}, and make sure it is a ${s.label}.`,
-      });
-    }
-  }
-  // 4. NOT Shape AND Count >= 2 or Odd/Even (12+ rules for Tiers 3–4)
-  if (tier >= 3) {
     for (const s of SHAPES) {
       pool.push({
         id: `nots-ge2-${s.id}`,
@@ -117,24 +123,43 @@ function buildBooleanRulePool(tier) {
         tip: `Must be a ${s.label} with 1 or 3 shapes (not 2).`,
       });
     }
-    for (const c of COLORS) {
+    return pool;
+  }
+
+  // Tier 4 (Ages 11+): Strictly 3-attribute nested Boolean expressions & XOR (EXACTLY ONE)!
+  for (const c of COLORS) {
+    for (const s of SHAPES) {
+      // True XOR: Exactly ONE of Color or Shape (not both, not neither!)
       pool.push({
-        id: `nots-or-${c.id}`,
-        label: `NOT ${colorMap[c.id]} OR has 2 shapes`,
-        test: (card) => card.color !== c.id || card.count === 2,
-        tip: `Matches if it is NOT ${colorMap[c.id]}, OR if it has exactly 2 shapes!`,
+        id: `xor-${c.id}-${s.id}`,
+        label: `EXACTLY ONE of: ${c.label}, OR ${s.label}`,
+        test: (card) => (card.color === c.id) !== (card.shape === s.id),
+        tip: `Exclusive OR (XOR)! Exactly ONE must be true — if it is BOTH ${c.label} and ${s.label}, or NEITHER, it does NOT match!`,
+      });
+      // Nested NOT Color AND (Shape OR 3 shapes)
+      pool.push({
+        id: `nest-notc-${c.id}-${s.id}`,
+        label: `NOT ${c.label}, AND (${s.label} OR 3 shapes)`,
+        test: (card) => card.color !== c.id && (card.shape === s.id || card.count === 3),
+        tip: `First rule out ${c.label}; then check that it is either a ${s.label} OR has 3 shapes!`,
+      });
+      // 2+ shapes AND NOT (Color + Shape)
+      pool.push({
+        id: `ge2-nand-${c.id}-${s.id}`,
+        label: `2+ shapes, AND NOT (${c.label} ${s.label})`,
+        test: (card) => card.count >= 2 && !(card.color === c.id && card.shape === s.id),
+        tip: `Must have 2 or 3 shapes, and cannot be the forbidden combo (${c.label} ${s.label})!`,
       });
     }
-    // Shape OR Color (9 rules)
+  }
+  for (const s of SHAPES) {
     for (const c of COLORS) {
-      for (const s of SHAPES) {
-        pool.push({
-          id: `or-cs-${c.id}-${s.id}`,
-          label: `${c.label} OR ${shapeMap[s.id]}`,
-          test: (card) => card.color === c.id || card.shape === s.id,
-          tip: `EITHER ${c.label} OR a ${shapeMap[s.id]} passes!`,
-        });
-      }
+      pool.push({
+        id: `odd-not-${c.id}-${s.id}`,
+        label: `Odd count (1 or 3), AND NOT ${colorMap[c.id]}, AND NOT ${shapeMap[s.id]}`,
+        test: (card) => (card.count === 1 || card.count === 3) && card.color !== c.id && card.shape !== s.id,
+        tip: `All three must hold: 1 or 3 shapes, NOT ${colorMap[c.id]}, and NOT ${shapeMap[s.id]}!`,
+      });
     }
   }
   return pool;
@@ -172,7 +197,7 @@ function makeSortRound(tier) {
     };
   }
 
-  // Tiers 2–4: Procedural Boolean compound rule switching (45+ unique rules!)
+  // Tiers 2–4: Procedural Boolean compound rule switching
   const pool = buildBooleanRulePool(tier);
   const rules = shuffle(pool).slice(0, 2);
 
@@ -202,18 +227,21 @@ function makeSortRound(tier) {
 
   return {
     kind: 'sort-bool',
-    signature: `bool:${rules[0].id}|${rules[1].id}`,
+    signature: `bool${tier}:${rules[0].id}|${rules[1].id}`,
     cards,
     prompt: 'Does the card match the Logic Rule?',
     speakPrompt: 'Check if each card matches the logic rule! Watch closely when the rule switches!',
-    strategyTip: 'Test each condition one by one — for AND both must be true; for OR at least one must be true!',
+    strategyTip:
+      tier >= 4
+        ? 'Check every clause inside the parentheses first! For EXACTLY ONE (XOR), both true counts as a mismatch.'
+        : 'Test each condition one by one — for AND both must be true; for OR at least one must be true!',
   };
 }
 
 /**
  * High-transfer Algebraic Function Machine (IN -> [ ? ] -> OUT)
  */
-function makeFunctionMachineRound(tier) {
+function makeFunctionMachineRound(tier, preferredFamily = null) {
   let fn;
   let ruleLabel;
   let sig;
@@ -223,12 +251,12 @@ function makeFunctionMachineRound(tier) {
   if (tier === 1) {
     const ops = [
       () => {
-        const k = randInt(1, 4);
+        const k = randInt(1, 3);
         return { fn: (x) => x + k, ruleLabel: `+ ${k}`, sig: `fm1:+${k}`, inputs: shuffle([1, 2, 3, 4, 5, 6]).slice(0, 4), tip: `Every number going in gets +${k} added to it!` };
       },
       () => {
-        const k = randInt(1, 3);
-        return { fn: (x) => x - k, ruleLabel: `− ${k}`, sig: `fm1:-${k}`, inputs: shuffle([4, 5, 6, 7, 8, 9]).slice(0, 4), tip: `The machine takes away ${k} from every number!` };
+        const k = randInt(1, 2);
+        return { fn: (x) => x - k, ruleLabel: `− ${k}`, sig: `fm1:-${k}`, inputs: shuffle([3, 4, 5, 6, 7, 8]).slice(0, 4), tip: `The machine takes away ${k} from every number!` };
       },
       () => ({
         fn: (x) => x * 2,
@@ -292,10 +320,11 @@ function makeFunctionMachineRound(tier) {
     ];
     ({ fn, ruleLabel, sig, inputs, tip } = pickOne(ops)());
   } else {
-    const ops = [
-      () => {
-        const m = pickOne([3, 4, 5]);
-        const b = pickOne([-4, -3, -2, 2, 3, 5, 7]);
+    // Tier 4: 5 distinct algebraic families (linear steep, quadratic +c, quadratic -c, n(n+1), shifted linear (n+a)*b)
+    const families = {
+      linear: () => {
+        const m = pickOne([3, 4, 5, 6]);
+        const b = pickOne([-5, -4, -3, 3, 5, 7]);
         const sign = b >= 0 ? `+ ${b}` : `− ${Math.abs(b)}`;
         return {
           fn: (x) => x * m + b,
@@ -305,8 +334,8 @@ function makeFunctionMachineRound(tier) {
           tip: `Linear function! Multiply by ${m}, then ${sign}.`,
         };
       },
-      () => {
-        const c = randInt(1, 5);
+      sqPlus: () => {
+        const c = randInt(2, 6);
         return {
           fn: (x) => x * x + c,
           ruleLabel: `n² + ${c}`,
@@ -315,15 +344,37 @@ function makeFunctionMachineRound(tier) {
           tip: `Square the input (n × n), then add ${c}!`,
         };
       },
-      () => ({
+      sqMinus: () => {
+        const c = randInt(1, 4);
+        return {
+          fn: (x) => x * x - c,
+          ruleLabel: `n² − ${c}`,
+          sig: `fm4:sq-${c}`,
+          inputs: shuffle([3, 4, 5, 6, 7, 8]).slice(0, 4),
+          tip: `Square the input (n × n), then subtract ${c}!`,
+        };
+      },
+      pronic: () => ({
         fn: (x) => x * (x + 1),
         ruleLabel: 'n × (n + 1)',
         sig: 'fm4:n(n+1)',
-        inputs: shuffle([2, 3, 4, 5, 6, 7]).slice(0, 4),
+        inputs: shuffle([2, 3, 4, 5, 6, 7, 8]).slice(0, 4),
         tip: 'Multiply the input by the very next whole number: n × (n + 1)!',
       }),
-    ];
-    ({ fn, ruleLabel, sig, inputs, tip } = pickOne(ops)());
+      doubleSq: () => {
+        const b = pickOne([-1, 1, 2]);
+        const sign = b >= 0 ? `+ ${b}` : `− ${Math.abs(b)}`;
+        return {
+          fn: (x) => 2 * x * x + b,
+          ruleLabel: `2n² ${sign}`,
+          sig: `fm4:2sq+${b}`,
+          inputs: shuffle([2, 3, 4, 5, 6]).slice(0, 4),
+          tip: `Square the input, double it (2n²), then ${sign}!`,
+        };
+      },
+    };
+    const famKey = preferredFamily && families[preferredFamily] ? preferredFamily : pickOne(Object.keys(families));
+    ({ fn, ruleLabel, sig, inputs, tip } = families[famKey]());
   }
 
   const examples = inputs.slice(0, 3).sort((a, b) => a - b).map((x) => ({ inVal: x, outVal: fn(x) }));
@@ -467,60 +518,124 @@ function makeVisualPatternRound(tier, stage = 1) {
     };
   }
 
-  // Tiers 3 & 4: Procedural advanced number sequences (dozens of unique rules!)
-  const genType = pickOne(['growDiff', 'doublePlus', 'geometric', 'fib', 'altBig']);
+  if (tier === 3) {
+    // Tier 3 (Ages 9–10): Growing differences, doubling ± k, geometric, Fibonacci, two-step rhythm
+    const genType = pickOne(['growDiff', 'doublePlus', 'geometric', 'fib', 'altBig']);
+    let seq;
+    let answer;
+    let tip;
+    let sig;
+
+    if (genType === 'growDiff') {
+      const start = randInt(1, 9);
+      const d0 = randInt(1, 4);
+      const inc = pickOne([1, 2]);
+      seq = [start];
+      for (let i = 0; i < 4; i++) {
+        seq.push(seq[seq.length - 1] + d0 + i * inc);
+      }
+      answer = seq[seq.length - 1] + d0 + 4 * inc;
+      tip = `The jump grows by +${inc} each time (+${d0}, +${d0 + inc}, +${d0 + 2 * inc}, +${d0 + 3 * inc} → next +${d0 + 4 * inc})!`;
+      sig = `pn3:gd:${start}:${d0}:${inc}`;
+    } else if (genType === 'doublePlus') {
+      const start = randInt(1, 4);
+      const k = pickOne([-1, 1, 2]);
+      seq = [start];
+      for (let i = 0; i < 3; i++) {
+        seq.push(seq[seq.length - 1] * 2 + k);
+      }
+      answer = seq[seq.length - 1] * 2 + k;
+      const sign = k >= 0 ? `+ ${k}` : `− ${Math.abs(k)}`;
+      tip = `Each step doubles and adjusts: (× 2 ${sign})!`;
+      sig = `pn3:dp:${start}:${k}`;
+    } else if (genType === 'geometric') {
+      const start = randInt(1, 4);
+      const mult = pickOne([2, 3]);
+      seq = [start, start * mult, start * mult ** 2, start * mult ** 3];
+      answer = start * mult ** 4;
+      tip = `Each number multiplies by ×${mult}!`;
+      sig = `pn3:geo:${start}:${mult}`;
+    } else if (genType === 'fib') {
+      const a = randInt(1, 5);
+      const b = randInt(2, 6);
+      seq = [a, b, a + b, a + 2 * b, 2 * a + 3 * b];
+      answer = seq[3] + seq[4];
+      tip = `Add the previous two numbers together: ${seq[3]} + ${seq[4]} = ${answer}!`;
+      sig = `pn3:fib:${a}:${b}`;
+    } else {
+      const start = randInt(5, 16);
+      const up = randInt(6, 12);
+      const down = randInt(2, 5);
+      seq = [start, start + up, start + up - down, start + 2 * up - down, start + 2 * up - 2 * down];
+      answer = seq[4] + up;
+      tip = `Two-step rhythm: +${up}, then −${down}!`;
+      sig = `pn3:alt:${start}:${up}:${down}`;
+    }
+
+    const spread = answer > 40 ? 8 : 5;
+    const choices = makeNumericChoices(answer, 4, 1, spread);
+    return {
+      kind: 'pattern-number',
+      signature: sig,
+      seq,
+      choices,
+      answer,
+      prompt: 'Find the hidden number rule! What comes next?',
+      speakPrompt: `Find the hidden number rule: ${seq.join(', ')}. What comes next?`,
+      strategyTip: tip,
+    };
+  }
+
+  // Tier 4 (Ages 11+): Strictly middle-grade sequences (squares ± c, interleaved dual streams, ×2 ± k / ×3 − k, second-order diffs)
+  const genType = pickOne(['squaresOffset', 'interleaved', 'recurrence', 'growDiffHard']);
   let seq;
   let answer;
   let tip;
   let sig;
 
-  if (genType === 'growDiff') {
-    const start = randInt(1, 9);
-    const d0 = randInt(1, 4);
-    const inc = pickOne([1, 2, 3]);
+  if (genType === 'squaresOffset') {
+    const startN = randInt(2, 4);
+    const c = pickOne([-2, -1, 2, 3, 5]);
+    seq = [0, 1, 2, 3, 4].map((i) => (startN + i) ** 2 + c);
+    answer = (startN + 5) ** 2 + c;
+    const sign = c >= 0 ? `+ ${c}` : `− ${Math.abs(c)}`;
+    tip = `Compare to perfect squares (${startN}², ${startN + 1}², ${startN + 2}²...): every term is n² ${sign}!`;
+    sig = `pn4:sq:${startN}:${c}`;
+  } else if (genType === 'interleaved') {
+    const a0 = randInt(2, 9);
+    const da = pickOne([3, 4, 5]);
+    const b0 = randInt(24, 42);
+    const db = pickOne([3, 4, 5]);
+    seq = [a0, b0, a0 + da, b0 - db, a0 + 2 * da, b0 - 2 * db];
+    answer = a0 + 3 * da;
+    tip = `Two interleaved streams! Odd positions climb by +${da} (${a0}, ${a0 + da}, ${a0 + 2 * da} → ${answer}), while even positions drop by −${db}.`;
+    sig = `pn4:int:${a0}:${da}:${b0}:${db}`;
+  } else if (genType === 'recurrence') {
+    const mult = pickOne([2, 3]);
+    const start = randInt(2, 4);
+    const k = mult === 3 ? pickOne([-2, -1, 1]) : pickOne([-3, -2, 3, 5]);
+    seq = [start];
+    for (let i = 0; i < 3; i++) {
+      seq.push(seq[seq.length - 1] * mult + k);
+    }
+    answer = seq[seq.length - 1] * mult + k;
+    const sign = k >= 0 ? `+ ${k}` : `− ${Math.abs(k)}`;
+    tip = `Check the ratio between terms: each step multiplies by ${mult}, then ${sign}!`;
+    sig = `pn4:rec:${mult}:${start}:${k}`;
+  } else {
+    const start = randInt(3, 12);
+    const d0 = randInt(3, 7);
+    const inc = pickOne([3, 4, 5]);
     seq = [start];
     for (let i = 0; i < 4; i++) {
       seq.push(seq[seq.length - 1] + d0 + i * inc);
     }
     answer = seq[seq.length - 1] + d0 + 4 * inc;
-    tip = `The jump grows by +${inc} each time (+${d0}, +${d0 + inc}, +${d0 + 2 * inc}, +${d0 + 3 * inc} → next +${d0 + 4 * inc})!`;
-    sig = `pn3:gd:${start}:${d0}:${inc}`;
-  } else if (genType === 'doublePlus') {
-    const start = randInt(1, 4);
-    const k = pickOne([-1, 1, 2, 3]);
-    seq = [start];
-    for (let i = 0; i < 3; i++) {
-      seq.push(seq[seq.length - 1] * 2 + k);
-    }
-    answer = seq[seq.length - 1] * 2 + k;
-    const sign = k >= 0 ? `+ ${k}` : `− ${Math.abs(k)}`;
-    tip = `Each step doubles and adjusts: (× 2 ${sign})!`;
-    sig = `pn3:dp:${start}:${k}`;
-  } else if (genType === 'geometric') {
-    const start = randInt(1, 4);
-    const mult = pickOne([2, 3]);
-    seq = [start, start * mult, start * mult ** 2, start * mult ** 3];
-    answer = start * mult ** 4;
-    tip = `Each number multiplies by ×${mult}!`;
-    sig = `pn3:geo:${start}:${mult}`;
-  } else if (genType === 'fib') {
-    const a = randInt(1, 5);
-    const b = randInt(2, 6);
-    seq = [a, b, a + b, a + 2 * b, 2 * a + 3 * b];
-    answer = seq[3] + seq[4];
-    tip = `Add the previous two numbers together: ${seq[3]} + ${seq[4]} = ${answer}!`;
-    sig = `pn3:fib:${a}:${b}`;
-  } else {
-    const start = randInt(5, 16);
-    const up = randInt(6, 12);
-    const down = randInt(2, 5);
-    seq = [start, start + up, start + up - down, start + 2 * up - down, start + 2 * up - 2 * down];
-    answer = seq[4] + up;
-    tip = `Two-step rhythm: +${up}, then −${down}!`;
-    sig = `pn3:alt:${start}:${up}:${down}`;
+    tip = `Find the differences between neighbors (+${d0}, +${d0 + inc}, +${d0 + 2 * inc}, +${d0 + 3 * inc}) — the jump itself grows by +${inc} each step!`;
+    sig = `pn4:gd:${start}:${d0}:${inc}`;
   }
 
-  const spread = answer > 40 ? 8 : 5;
+  const spread = answer > 50 ? 9 : 6;
   const choices = makeNumericChoices(answer, 4, 1, spread);
   return {
     kind: 'pattern-number',
@@ -607,6 +722,7 @@ export function generateSession(tier = 1, profile = null) {
   const recentSigs = getRecentPuzzleSigs(profile, scopeKey);
   const stage = getGameStage(profile, meta.id);
   const sessionSigs = new Set();
+  const t4FmFamilies = shuffle(['linear', 'sqPlus', 'sqMinus', 'pronic', 'doubleSq']);
 
   const blueprints = {
     1: [
@@ -631,11 +747,11 @@ export function generateSession(tier = 1, profile = null) {
       () => makeFunctionMachineRound(3),
     ],
     4: [
-      () => makeFunctionMachineRound(4),
+      () => makeFunctionMachineRound(4, t4FmFamilies[0]),
       () => makeMatrixRound(4, stage),
       () => makeSortRound(4),
       () => makeVisualPatternRound(4, stage),
-      () => makeFunctionMachineRound(4),
+      () => makeFunctionMachineRound(4, t4FmFamilies[1]),
     ],
   };
 

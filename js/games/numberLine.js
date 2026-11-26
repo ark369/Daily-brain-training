@@ -30,8 +30,8 @@ function formatVal(val, displayMode) {
 
 function buildTier3FractionPool() {
   const items = [];
-  // Proper fractions across denominators 2, 3, 4, 5, 6, 8, 10 (including equivalents like 2/4, 3/6, 4/8, 6/8!)
-  const denoms = [2, 3, 4, 5, 6, 8, 10];
+  // Proper fractions across denominators 3, 4, 5, 6, 8, 10 (skip trivial 1/2 in T3; equivalents 2/4, 3/6, 4/8 test real equivalence!)
+  const denoms = [3, 4, 5, 6, 8, 10];
   for (const d of denoms) {
     for (let n = 1; n < d; n++) {
       const val = n / d;
@@ -67,7 +67,7 @@ function buildTier3FractionPool() {
       label: String(dec),
       val: dec,
       max: 1,
-      splits: dec * 100 % 25 === 0 ? 4 : 10,
+      splits: (dec * 100) % 25 === 0 ? 4 : 10,
       tip: `Think of 0.5 as halfway! Cut into 10 tenths (or 4 quarters) to spot ${dec}.`,
     });
   }
@@ -85,6 +85,50 @@ function buildTier3FractionPool() {
 }
 
 const TIER3_FRACTION_POOL = buildTier3FractionPool();
+
+// Tier 4 Fraction/Decimal -> Percent conversion challenges on 0%..100%
+const TIER4_PERCENT_CONV_POOL = [
+  { sig: 'p:1/8', label: '1/8', val: 12.5, splits: 8, tip: '1/8 is half of 1/4 (25%) → 12.5%!' },
+  { sig: 'p:3/8', label: '3/8', val: 37.5, splits: 8, tip: 'Each eighth is 12.5%, so 3/8 = 37.5% — try cutting into 8 parts!' },
+  { sig: 'p:5/8', label: '5/8', val: 62.5, splits: 8, tip: '4/8 is 50%, plus one more eighth (12.5%) = 62.5%!' },
+  { sig: 'p:7/8', label: '7/8', val: 87.5, splits: 8, tip: 'One eighth (12.5%) short of 100% → 87.5%!' },
+  { sig: 'p:1/3', label: '1/3', val: 33.33, splits: 3, tip: 'One third of 100% is about 33%!' },
+  { sig: 'p:2/3', label: '2/3', val: 66.67, splits: 3, tip: 'Two thirds of 100% is about 67%!' },
+  { sig: 'p:1/6', label: '1/6', val: 16.67, splits: 6, tip: '1/6 is half of 1/3 (33%) → about 17%!' },
+  { sig: 'p:5/6', label: '5/6', val: 83.33, splits: 6, tip: '5/6 is one sixth (~17%) below 100% → about 83%!' },
+  { sig: 'p:3/5', label: '3/5', val: 60, splits: 5, tip: 'Each fifth is 20%, so 3/5 = 60%!' },
+  { sig: 'p:4/5', label: '4/5', val: 80, splits: 5, tip: 'Each fifth is 20%, so 4/5 = 80%!' },
+  { sig: 'p:7/20', label: '7/20', val: 35, splits: 10, tip: 'Multiply top & bottom by 5: 7/20 = 35/100 = 35%!' },
+  { sig: 'p:9/20', label: '9/20', val: 45, splits: 10, tip: '9/20 = 45/100 = 45% — just under halfway!' },
+  { sig: 'p:13/20', label: '13/20', val: 65, splits: 10, tip: '13/20 = 65/100 = 65%!' },
+  { sig: 'p:17/20', label: '17/20', val: 85, splits: 10, tip: '17/20 = 85/100 = 85%!' },
+  { sig: 'p:19/20', label: '19/20', val: 95, splits: 10, tip: '19/20 = 95/100 = 95%!' },
+  { sig: 'p:3/25', label: '3/25', val: 12, splits: 10, tip: 'Multiply top & bottom by 4: 3/25 = 12/100 = 12%!' },
+  { sig: 'p:7/25', label: '7/25', val: 28, splits: 10, tip: '7/25 = 28/100 = 28% — just past 25%!' },
+  { sig: 'p:11/25', label: '11/25', val: 44, splits: 10, tip: '11/25 = 44/100 = 44%!' },
+  { sig: 'p:18/25', label: '18/25', val: 72, splits: 10, tip: '18/25 = 72/100 = 72% — just under 75%!' },
+  { sig: 'p:0.375', label: '0.375', val: 37.5, splits: 8, tip: 'Slide the decimal two places right: 0.375 = 37.5% (3/8)!' },
+  { sig: 'p:0.625', label: '0.625', val: 62.5, splits: 8, tip: '0.625 = 62.5% (5/8)!' },
+  { sig: 'p:0.85', label: '0.85', val: 85, splits: 10, tip: '0.85 = 85%!' },
+];
+
+// Tier 4 Negative Rational Numbers on -2..+2
+const TIER4_NEG_RATIONAL_POOL = [
+  { sig: 'nr:-1/4', label: '−1/4', val: -0.25, splits: 4, tip: 'Negative numbers go LEFT of 0 — −1/4 is one quarter left of 0!' },
+  { sig: 'nr:-3/4', label: '−3/4', val: -0.75, splits: 4, tip: 'Move left from 0 toward −1: −3/4 sits three quarters of the way to −1!' },
+  { sig: 'nr:-5/4', label: '−5/4', val: -1.25, splits: 4, tip: '−4/4 is −1, so −5/4 goes 1 quarter FURTHER LEFT past −1!' },
+  { sig: 'nr:-7/4', label: '−7/4', val: -1.75, splits: 4, tip: '−8/4 is −2, so −7/4 sits 1 quarter to the right of −2!' },
+  { sig: 'nr:-1.5', label: '−1.5', val: -1.5, splits: 2, tip: '−1.5 sits right halfway between −1 and −2!' },
+  { sig: 'nr:-1.25', label: '−1.25', val: -1.25, splits: 4, tip: 'Go left past −1, then a quarter of the way toward −2!' },
+  { sig: 'nr:-1.75', label: '−1.75', val: -1.75, splits: 4, tip: 'Three quarters of the way from −1 toward −2!' },
+  { sig: 'nr:-2/3', label: '−2/3', val: -2 / 3, splits: 3, tip: 'Cut each whole into 3 thirds and hop 2 thirds LEFT of 0!' },
+  { sig: 'nr:-4/3', label: '−4/3', val: -4 / 3, splits: 3, tip: '−3/3 is −1, so −4/3 is one third past −1 toward −2!' },
+  { sig: 'nr:-5/3', label: '−5/3', val: -5 / 3, splits: 3, tip: '−5/3 is −1 2/3 — just one third right of −2!' },
+  { sig: 'nr:-0.6', label: '−0.6', val: -0.6, splits: 5, tip: '−0.6 is −3/5 — just past halfway (−0.5) toward −1!' },
+  { sig: 'nr:-1.4', label: '−1.4', val: -1.4, splits: 5, tip: 'Go left past −1, then two fifths (0.4) toward −2!' },
+  { sig: 'nr:-5/8', label: '−5/8', val: -0.625, splits: 8, tip: 'Cut each whole into 8 eighths and count 5 eighths LEFT of 0!' },
+  { sig: 'nr:-3/2', label: '−3/2', val: -1.5, splits: 2, tip: '−3/2 = −1 1/2, halfway between −1 and −2!' },
+];
 
 function makeRoundForTier(tier, idx, stage = 1) {
   if (tier === 1) {
@@ -276,56 +320,96 @@ function makeRoundForTier(tier, idx, stage = 1) {
     };
   }
 
-  // Tier 4: Procedural negative integer hops (-10..+10), percents (5%–95% + 33%/67%), & mixed fractions
-  if (idx === 0 || idx === 2 || idx === 4) {
-    const start = randInt(-8, 7);
-    const hop = pickOne([-7, -6, -5, -4, -3, 3, 4, 5, 6, 7]);
-    const rawTarget = Math.max(-9, Math.min(9, start + hop));
-    const target = rawTarget === start ? (start <= 0 ? start + 4 : start - 4) : rawTarget;
-    const actualHop = target - start;
-    const sign = actualHop >= 0 ? `+${actualHop}` : `${actualHop}`;
+  // Tier 4 (Trailblazer, Ages 11+):
+  // - idx 0 & 3: Zero-crossing / negative integer arithmetic on -15..+15 (landmarks only, NEVER all-positive!)
+  // - idx 1 & 4: Fraction/Decimal -> Percent conversion on 0%..100%
+  // - idx 2: Negative fractions & decimals on -2..+2
+  if (idx === 0 || idx === 3) {
+    let start;
+    let target;
+    let actualHop;
+    // Guarantee every integer round involves negative numbers (70% crossing 0, 30% negative-to-negative)
+    if (Math.random() < 0.72) {
+      if (Math.random() < 0.5) {
+        start = randInt(-12, -3);
+        target = randInt(2, 11);
+      } else {
+        start = randInt(3, 12);
+        target = randInt(-11, -2);
+      }
+    } else {
+      start = randInt(-13, -2);
+      const delta = pickOne([-9, -8, -7, -6, -5, 4, 5, 6, 7, 8]);
+      target = Math.max(-14, Math.min(-1, start + delta));
+      if (target === start) target = start <= -7 ? start + 5 : start - 5;
+    }
+    actualHop = target - start;
+    const sign = actualHop >= 0 ? `+${actualHop}` : `−${Math.abs(actualHop)}`;
+    const fmtN = (n) => (n < 0 ? `−${Math.abs(n)}` : String(n));
     return {
       signature: `nl4:int:${start}:${actualHop}`,
-      min: -10,
-      max: 10,
+      min: -15,
+      max: 15,
       step: 1,
       target,
       startPos: start,
       hopDelta: actualHop,
       tolerance: 0.55,
       showAllTicks: true,
-      landmarks: [-10, -5, 0, 5, 10],
+      landmarks: [-15, -10, -5, 0, 5, 10, 15],
       displayMode: 'int',
-      targetLabel: `${start} ${actualHop >= 0 ? '+' : '−'} ${Math.abs(actualHop)}`,
-      prompt: `Start at ${start} and move ${sign}!`,
-      speakPrompt: `Start at ${start} and move ${actualHop >= 0 ? 'right' : 'left'} ${Math.abs(actualHop)}.`,
+      targetLabel: `${fmtN(start)} ${actualHop >= 0 ? '+' : '−'} ${Math.abs(actualHop)}`,
+      prompt: `Start at ${fmtN(start)} and move ${sign}!`,
+      speakPrompt: `Start at ${start < 0 ? `negative ${Math.abs(start)}` : start} and move ${actualHop >= 0 ? 'right' : 'left'} ${Math.abs(actualHop)}.`,
       strategyTip:
         actualHop >= 0
-          ? 'Adding moves RIGHT toward positive numbers — count how many hops reach 0 first!'
-          : 'Subtracting moves LEFT toward negative numbers — hop to 0 first, then keep going left!',
+          ? `Bridge through 0! From ${fmtN(start)}, it takes ${Math.abs(Math.min(0, start))} to reach 0, then keep moving right.`
+          : `Bridge through 0! From ${fmtN(start)}, moving left crosses 0 into negative numbers — use −5, −10, −15 as anchors.`,
     };
   }
 
-  const pctChoices = [10, 15, 20, 25, 30, 33, 40, 45, 55, 60, 67, 70, 75, 80, 85, 90, 95];
-  const pct = pickOne(pctChoices);
+  if (idx === 2) {
+    const item = pickOne(TIER4_NEG_RATIONAL_POOL);
+    return {
+      signature: `nl4:${item.sig}`,
+      min: -2,
+      max: 2,
+      step: 0.05,
+      target: item.val,
+      startPos: 0,
+      hopDelta: 0,
+      tolerance: 0.14,
+      showAllTicks: false,
+      guideSplits: item.splits * 4,
+      allowSelfPartition: true,
+      landmarks: [-2, -1, 0, 1, 2],
+      displayMode: 'decimal',
+      targetLabel: item.label,
+      prompt: `Place the frog at ${item.label} on the number line!`,
+      speakPrompt: `Place the frog at ${item.label} between negative two and positive two.`,
+      strategyTip: item.tip,
+    };
+  }
+
+  const conv = pickOne(TIER4_PERCENT_CONV_POOL);
   return {
-    signature: `nl4:pct:${pct}`,
+    signature: `nl4:${conv.sig}`,
     min: 0,
     max: 100,
-    step: 1,
-    target: pct,
+    step: 0.5,
+    target: conv.val,
     startPos: 0,
     hopDelta: 0,
-    tolerance: 5,
+    tolerance: 4,
     showAllTicks: false,
-    guideSplits: 10,
+    guideSplits: conv.splits,
     allowSelfPartition: true,
     landmarks: [0, 50, 100],
     displayMode: 'percent',
-    targetLabel: `${pct}%`,
-    prompt: `Place the frog at ${pct}%!`,
-    speakPrompt: `Place the frog at ${pct} percent.`,
-    strategyTip: 'Think of 50% as half, 25% as a quarter, 33% as one-third, and 75% as three-quarters!',
+    targetLabel: `${conv.label} → ?%`,
+    prompt: `Convert ${conv.label} to a percent and land the frog!`,
+    speakPrompt: `Convert ${conv.label} to a percent and place the frog between zero percent and one hundred percent.`,
+    strategyTip: conv.tip,
   };
 }
 
@@ -395,7 +479,7 @@ export function renderRound(container, round, callbacks) {
     }
     // Gentle magnetic snap to active self-partition ticks when kid cuts the bar into N equal parts!
     if (activePartitions > 0) {
-      const unitStep = 1 / activePartitions;
+      const unitStep = round.displayMode === 'percent' ? 100 / activePartitions : 1 / activePartitions;
       const nearest = Math.round(raw / unitStep) * unitStep;
       const snapRadius = (round.max - round.min) * 0.032;
       if (Math.abs(raw - nearest) <= snapRadius && nearest >= round.min && nearest <= round.max) {
@@ -432,9 +516,10 @@ export function renderRound(container, round, callbacks) {
         );
       }
 
+      const wholeUnits = round.displayMode === 'percent' ? 1 : Math.max(1, Math.round(round.max - round.min));
       const splitsToDraw =
         activePartitions > 0
-          ? activePartitions * (round.max === 2 ? 2 : 1)
+          ? activePartitions * wholeUnits
           : (showGuides || revealTarget) && round.guideSplits
             ? round.guideSplits
             : 0;
@@ -481,18 +566,26 @@ export function renderRound(container, round, callbacks) {
       hopArcs = `<path d="M ${x1} ${lineY - 6} Q ${(x1 + x2) / 2} ${lineY - 46} ${x2} ${lineY - 6}" fill="none" stroke="#2E9690" stroke-width="2.6" stroke-dasharray="5 3"/>`;
     }
 
-    let targetFlag = '';
-    if (revealTarget) {
-      const tx = valToX(round.target);
-      const boxX = Math.min(540, Math.max(8, tx - 27));
-      targetFlag = `
-        <line x1="${tx}" y1="${lineY - 44}" x2="${tx}" y2="${lineY}" stroke="#2F9E66" stroke-width="3"/>
-        <rect x="${boxX}" y="${lineY - 44}" width="54" height="22" rx="6" fill="#2F9E66"/>
-        <text x="${boxX + 27}" y="${lineY - 29}" text-anchor="middle" font-family="Fredoka, sans-serif" font-size="12" font-weight="700" fill="#FFF">${round.targetLabel}</text>
-      `;
-    }
+    return `${ticks.join('')}${startMarker}${hopArcs}`;
+  }
 
-    return `${ticks.join('')}${startMarker}${hopArcs}${targetFlag}`;
+  function buildTargetFlagMarkup(revealTarget) {
+    if (!revealTarget) return '';
+    const tx = valToX(round.target);
+    const flagText =
+      round.displayMode === 'percent'
+        ? `${Number(round.target.toFixed(1))}%`
+        : round.hopDelta !== 0
+          ? `${round.target < 0 ? `−${Math.abs(round.target)}` : round.target}`
+          : round.targetLabel;
+    const boxW = Math.max(48, flagText.length * 8.5 + 16);
+    const boxX = Math.min(592 - boxW, Math.max(8, tx - boxW / 2));
+    const boxY = Math.max(4, lineY - 70);
+    return `
+      <line x1="${tx}" y1="${boxY + 22}" x2="${tx}" y2="${lineY - 38}" stroke="#2F9E66" stroke-width="2.5" stroke-dasharray="3 2"/>
+      <rect x="${boxX.toFixed(1)}" y="${boxY}" width="${boxW.toFixed(1)}" height="22" rx="7" fill="#2F9E66"/>
+      <text x="${(boxX + boxW / 2).toFixed(1)}" y="${boxY + 15}" text-anchor="middle" font-family="Fredoka, sans-serif" font-size="12" font-weight="700" fill="#FFF">${flagText}</text>
+    `;
   }
 
   // Mount persistent SVG once so pointer capture & keyboard focus stay unbroken during smooth dragging!
@@ -511,11 +604,13 @@ export function renderRound(container, round, callbacks) {
         <circle cx="7" cy="-10" r="2.5" fill="#232733"/>
         <path d="M -6 3 Q 0 8 6 3" fill="none" stroke="#232733" stroke-width="2" stroke-linecap="round"/>
       </g>
+      <g id="nl-flag-layer"></g>
     </svg>
   `;
 
   const svgEl = trackCard.querySelector('svg');
   const decorLayer = trackCard.querySelector('#nl-decor-layer');
+  const flagLayer = trackCard.querySelector('#nl-flag-layer');
   const frogEl = trackCard.querySelector('#nl-frog');
 
   function updateFrogPositionOnly() {
@@ -524,7 +619,10 @@ export function renderRound(container, round, callbacks) {
     if (round.showAllTicks) {
       readout.textContent = `Frog is on: ${formatVal(currentVal, round.displayMode)}`;
     } else if (activePartitions > 0) {
-      readout.textContent = `Cut into ${activePartitions} equal parts per whole · Drag or tap to place the frog`;
+      readout.textContent =
+        round.displayMode === 'percent'
+          ? `Cut 0%–100% into ${activePartitions} equal parts · Drag or tap to place the frog`
+          : `Cut into ${activePartitions} equal parts per whole · Drag or tap to place the frog`;
     } else {
       readout.textContent = 'Drag or tap anywhere on the line to place the frog';
     }
@@ -532,6 +630,7 @@ export function renderRound(container, round, callbacks) {
 
   function updateDisplay(reveal = false) {
     decorLayer.innerHTML = buildTicksAndRevealMarkup(reveal);
+    flagLayer.innerHTML = buildTargetFlagMarkup(reveal);
     updateFrogPositionOnly();
   }
 
@@ -568,7 +667,9 @@ export function renderRound(container, round, callbacks) {
     const delta = round.showAllTicks
       ? 1
       : activePartitions > 0
-        ? 1 / activePartitions
+        ? round.displayMode === 'percent'
+          ? 100 / activePartitions
+          : 1 / activePartitions
         : (round.max - round.min) / 20;
     if (e.key === 'ArrowRight') {
       e.preventDefault();
@@ -589,8 +690,8 @@ export function renderRound(container, round, callbacks) {
   if (round.allowSelfPartition) {
     partBar = document.createElement('div');
     partBar.className = 'nl-partition-bar';
-    const cuts = round.displayMode === 'percent' ? [2, 4, 5, 10] : [2, 3, 4, 5, 6, 8, 10];
-    partBar.innerHTML = `<span class="nl-part-label">Cut each whole into:</span>`;
+    const cuts = [2, 3, 4, 5, 6, 8, 10];
+    partBar.innerHTML = `<span class="nl-part-label">${round.displayMode === 'percent' ? 'Cut 0%–100% into:' : 'Cut each whole into:'}</span>`;
     cuts.forEach((n) => {
       const b = document.createElement('button');
       b.type = 'button';
@@ -673,9 +774,15 @@ export function renderRound(container, round, callbacks) {
       currentVal = round.target;
       checkBtn.disabled = true;
       updateDisplay(true);
+      const resolvedDesc =
+        round.displayMode === 'percent' && round.targetLabel.includes('→')
+          ? `${round.targetLabel.split('→')[0].trim()} = ${Number(round.target.toFixed(1))}%`
+          : round.hopDelta !== 0
+            ? `${round.targetLabel} = ${round.target < 0 ? `−${Math.abs(round.target)}` : round.target}`
+            : round.targetLabel;
       callbacks.onCorrect(
         !hadMistake,
-        `Great landing! ${round.targetLabel} sits right here on the line.`
+        `Great landing! ${resolvedDesc} sits right here on the line.`
       );
     } else {
       hadMistake = true;

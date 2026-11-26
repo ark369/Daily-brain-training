@@ -39,6 +39,9 @@ export const CHIRAL_SHAPES = [
   { name: 'Z-Hook', minTier: 3, cells: [[0, 0], [0, 1], [1, 1], [2, 1], [2, 2], [3, 2]] },
   { name: 'F-Tall', minTier: 3, cells: [[0, 1], [0, 2], [1, 0], [1, 1], [2, 1], [3, 1]] },
   { name: 'T-Step', minTier: 3, cells: [[0, 0], [0, 1], [0, 2], [1, 1], [2, 1], [2, 2]] },
+  // Heptominoes (Tier 4 stretch)
+  { name: 'S-Crown', minTier: 4, cells: [[0, 1], [0, 2], [1, 0], [1, 1], [2, 1], [3, 1], [3, 2]] },
+  { name: 'L-Wing', minTier: 4, cells: [[0, 0], [1, 0], [1, 1], [2, 0], [3, 0], [3, 1], [3, 2]] },
 ];
 
 export function normalizeCells(cells) {
@@ -73,35 +76,50 @@ function generateMirrorRound(tier, preferredAxis = null) {
       ? 'vertical'
       : tier === 2
         ? pickOne(['vertical', 'horizontal'])
-        : pickOne(['vertical', 'horizontal', 'diagonal']));
+        : tier === 3
+          ? pickOne(['vertical', 'horizontal', 'diagonal'])
+          : pickOne(['diagonal', 'anti-diagonal']));
 
-  if (axis === 'diagonal') {
-    // 4x4 grid reflected across main diagonal (r, c) <-> (c, r)
-    const size = 4;
-    const upperCoords = [];
+  if (axis === 'diagonal' || axis === 'anti-diagonal') {
+    const isAnti = axis === 'anti-diagonal';
+    const size = tier >= 4 ? 5 : 4;
+    const givenCoords = [];
     for (let r = 0; r < size; r++) {
-      for (let c = r + 1; c < size; c++) upperCoords.push([r, c]);
+      for (let c = 0; c < size; c++) {
+        if ((!isAnti && r < c) || (isAnti && r + c < size - 1)) {
+          givenCoords.push([r, c]);
+        }
+      }
     }
-    const chosen = shuffle(upperCoords).slice(0, randInt(3, 4));
+    const targetCount = tier >= 4 ? randInt(5, 7) : randInt(3, 4);
+    const chosen = shuffle(givenCoords).slice(0, targetCount);
     const grid = Array.from({ length: size }, () => Array(size).fill(0));
     chosen.forEach(([r, c]) => {
       grid[r][c] = 1;
     });
     const expectedLower = Array.from({ length: size }, (_, r) =>
-      Array.from({ length: size }, (_, c) => (r > c ? grid[c][r] : 0))
+      Array.from({ length: size }, (_, c) => {
+        if (!isAnti) return r > c ? grid[c][r] : 0;
+        return r + c > size - 1 ? grid[size - 1 - c][size - 1 - r] : 0;
+      })
     );
-    const sig = `mir:diag:${chosen.map(([r, c]) => `${r}${c}`).sort().join('-')}`;
+    const sig = `mir:${axis}:${size}:${chosen.map(([r, c]) => `${r}${c}`).sort().join('-')}`;
     return {
       kind: 'mirror',
-      axis: 'diagonal',
+      axis,
       signature: sig,
       rows: size,
       cols: size,
       leftGrid: grid,
       expectedRight: expectedLower,
-      prompt: 'Paint the mirror reflection across the diagonal line!',
-      speakPrompt: 'Tap the squares below the diagonal line to paint the exact reflection of the teal pattern above!',
-      strategyTip: 'Across a diagonal mirror, rows and columns trade places! A tile at Row 1, Column 3 reflects to Row 3, Column 1.',
+      prompt: isAnti
+        ? 'Paint the mirror reflection across the slanted diagonal line!'
+        : 'Paint the mirror reflection across the diagonal line!',
+      speakPrompt:
+        'Tap the squares across the diagonal mirror line to paint the exact reflection of the teal pattern!',
+      strategyTip: isAnti
+        ? 'Count perpendicular steps from each teal square to the diagonal line, then go the EXACT same distance on the opposite side!'
+        : 'Across a diagonal mirror, rows and columns trade places! A tile at Row 1, Column 3 reflects to Row 3, Column 1.',
     };
   }
 
@@ -162,13 +180,21 @@ function hasFourUniqueOrientations(cells) {
   return sigs.size === 4;
 }
 
+function getEligibleShapesForTier(tier, predictFirst) {
+  const minCells = tier >= 4 ? 6 : tier === 3 ? 5 : 4;
+  return CHIRAL_SHAPES.filter(
+    (s) =>
+      s.minTier <= tier &&
+      s.cells.length >= minCells &&
+      (!predictFirst || hasFourUniqueOrientations(s.cells))
+  );
+}
+
 function generateRotateRound(tier, preferredShape = null) {
   const predictFirst = tier >= 2;
-  const eligible = CHIRAL_SHAPES.filter(
-    (s) => s.minTier <= tier && (!predictFirst || hasFourUniqueOrientations(s.cells))
-  );
+  const eligible = getEligibleShapesForTier(tier, predictFirst);
   const base =
-    preferredShape && (!predictFirst || hasFourUniqueOrientations(preferredShape.cells))
+    preferredShape && eligible.some((s) => s.name === preferredShape.name)
       ? preferredShape
       : pickOne(eligible);
 
@@ -235,19 +261,21 @@ export function generateSession(tier = 1, profile = null) {
   const stage = getGameStage(profile, meta.id);
   const sessionSigs = new Set();
 
-  const eligibleShapes = shuffle(CHIRAL_SHAPES.filter((s) => s.minTier <= tier));
+  const eligibleShapes = shuffle(getEligibleShapesForTier(tier, tier >= 2));
   let shapeIdx = 0;
   const nextShape = () => eligibleShapes[shapeIdx++ % eligibleShapes.length];
 
-  const mirrorAxis1 = 'vertical';
+  const mirrorAxis1 = tier >= 4 ? 'diagonal' : 'vertical';
   const mirrorAxis2 =
     tier === 1
       ? 'vertical'
       : tier === 2
         ? 'horizontal'
-        : stage >= 2 || tier >= 4
-          ? 'diagonal'
-          : pickOne(['horizontal', 'diagonal']);
+        : tier === 3
+          ? stage >= 2
+            ? 'diagonal'
+            : pickOne(['horizontal', 'diagonal'])
+          : 'anti-diagonal';
 
   const makers = [
     () => generateMirrorRound(tier, mirrorAxis1),
@@ -308,7 +336,7 @@ function renderPolyominoSvg(cells, colorFill = '#2E9690', strokeColor = '#1E6863
 
 export function renderRound(container, round, callbacks) {
   if (round.kind === 'mirror') {
-    if (round.axis === 'diagonal') {
+    if (round.axis === 'diagonal' || round.axis === 'anti-diagonal') {
       renderDiagonalMirrorRound(container, round, callbacks);
     } else {
       renderMirrorRound(container, round, callbacks);
@@ -322,9 +350,14 @@ export function renderRound(container, round, callbacks) {
 
 function renderDiagonalMirrorRound(container, round, callbacks) {
   const size = round.rows;
+  const isAnti = round.axis === 'anti-diagonal';
   const userGrid = Array.from({ length: size }, () => Array(size).fill(0));
   let solved = false;
   let hadMistake = false;
+
+  const isAxis = (r, c) => (isAnti ? r + c === size - 1 : r === c);
+  const isGiven = (r, c) => (isAnti ? r + c < size - 1 : r < c);
+  const isInteractive = (r, c) => (isAnti ? r + c > size - 1 : r > c);
 
   const wrap = document.createElement('div');
   wrap.style.display = 'flex';
@@ -341,12 +374,12 @@ function renderDiagonalMirrorRound(container, round, callbacks) {
   for (let r = 0; r < size; r++) {
     buttons[r] = [];
     for (let c = 0; c < size; c++) {
-      if (r === c) {
+      if (isAxis(r, c)) {
         const diag = document.createElement('div');
         diag.className = 'mirror-cell diag-axis';
         diag.setAttribute('aria-hidden', 'true');
         board.appendChild(diag);
-      } else if (r < c) {
+      } else if (isGiven(r, c)) {
         const cell = document.createElement('div');
         cell.className = `mirror-cell given ${round.leftGrid[r][c] ? 'filled-a' : ''}`;
         board.appendChild(cell);
@@ -375,15 +408,20 @@ function renderDiagonalMirrorRound(container, round, callbacks) {
   checkBtn.addEventListener('click', () => {
     if (solved) return;
     let painted = 0;
-    for (let r = 1; r < size; r++) for (let c = 0; c < r; c++) painted += userGrid[r][c];
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        if (isInteractive(r, c)) painted += userGrid[r][c];
+      }
+    }
     if (painted === 0) {
-      callbacks.onRetry('Tap squares below the diagonal line to paint the reflection first!');
+      callbacks.onRetry('Tap squares across the diagonal line to paint the reflection first!');
       return;
     }
     let mismatches = 0;
     let hintedMissed = 0;
-    for (let r = 1; r < size; r++) {
-      for (let c = 0; c < r; c++) {
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        if (!isInteractive(r, c)) continue;
         const ok = userGrid[r][c] === round.expectedRight[r][c];
         if (!ok) {
           mismatches += 1;
@@ -399,7 +437,7 @@ function renderDiagonalMirrorRound(container, round, callbacks) {
     if (mismatches === 0) {
       solved = true;
       checkBtn.disabled = true;
-      callbacks.onCorrect(!hadMistake, 'Diagonal symmetry mastered! Rows and columns reflected cleanly.');
+      callbacks.onCorrect(!hadMistake, 'Diagonal symmetry mastered! Every tile reflected cleanly across the line.');
     } else {
       hadMistake = true;
       callbacks.onRetry(
