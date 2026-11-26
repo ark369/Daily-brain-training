@@ -24,7 +24,9 @@ export const meta = {
 // Exact 3D Cube-Net Folder (BFS over grid cells rolling a 3D orthonormal basis)
 // =========================================================================
 export function foldNet3D(cells) {
-  if (!Array.isArray(cells) || cells.length !== 6) return { valid: false, oppositeOf0: -1 };
+  if (!Array.isArray(cells) || cells.length !== 6) {
+    return { valid: false, oppositeOf0: -1, faceRoles: [], collidingIndices: [] };
+  }
   const byCoord = new Map(cells.map(([r, c], idx) => [`${r},${c}`, idx]));
   const visited = new Map();
   // Basis vectors: normal (outward face normal), right (+col), down (+row)
@@ -53,15 +55,34 @@ export function foldNet3D(cells) {
     }
   }
 
-  if (visited.size !== 6) return { valid: false, oppositeOf0: -1 };
-  const normals = new Set();
+  if (visited.size !== 6) {
+    return { valid: false, oppositeOf0: -1, faceRoles: [], collidingIndices: [] };
+  }
+  const byNormal = new Map();
   let oppositeOf0 = -1;
+  const roleByNormal = {
+    '0,0,-1': 'Floor',
+    '0,0,1': 'Lid',
+    '1,0,0': 'Wall',
+    '-1,0,0': 'Wall',
+    '0,1,0': 'Wall',
+    '0,-1,0': 'Wall',
+  };
+  const faceRoles = Array(6).fill('Wall');
+
   for (const [idx, b] of visited.entries()) {
     const key = b.n.join(',');
-    normals.add(key);
+    if (!byNormal.has(key)) byNormal.set(key, []);
+    byNormal.get(key).push(idx);
+    faceRoles[idx] = roleByNormal[key] || 'Wall';
     if (key === '0,0,1') oppositeOf0 = idx;
   }
-  return { valid: normals.size === 6, oppositeOf0 };
+
+  const collidingIndices = [];
+  for (const group of byNormal.values()) {
+    if (group.length > 1) collidingIndices.push(...group);
+  }
+  return { valid: byNormal.size === 6, oppositeOf0, faceRoles, collidingIndices };
 }
 
 // All 11 mathematically valid hexomino cube nets!
@@ -372,14 +393,16 @@ function renderMiniPieceSvg(cells, color, cellPx = 20) {
   return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">${rects}</svg>`;
 }
 
-function renderCubeNetSvg(cells, faceLabels = null, highlightLabel = null) {
+function renderCubeNetSvg(cells, faceLabels = null, highlightLabel = null, revealFold = false) {
   const maxR = Math.max(...cells.map(([r]) => r));
   const maxC = Math.max(...cells.map(([, c]) => c));
-  const s = 44;
+  const s = 46;
   const pad = 12;
   const w = (maxC + 1) * s + pad * 2;
   const h = (maxR + 1) * s + pad * 2;
   const coordSet = new Set(cells.map(([r, c]) => `${r},${c}`));
+  const foldInfo = revealFold ? foldNet3D(cells) : null;
+  const collideSet = new Set((foldInfo && foldInfo.collidingIndices) || []);
 
   const squares = cells
     .map(([r, c], idx) => {
@@ -387,12 +410,40 @@ function renderCubeNetSvg(cells, faceLabels = null, highlightLabel = null) {
       const y = pad + r * s;
       const isStar = faceLabels && faceLabels[idx] === '★';
       const isWin = highlightLabel && faceLabels && faceLabels[idx] === highlightLabel;
-      const fill = isStar ? '#FFE499' : isWin ? '#D6F3E3' : '#E3F3F2';
-      const stroke = isStar ? '#C98A10' : isWin ? '#2F9E66' : '#2E9690';
-      const label = faceLabels
-        ? `<text x="${x + s / 2}" y="${y + s / 2 + 6}" text-anchor="middle" font-family="Fredoka, sans-serif" font-size="${isStar ? 22 : 18}" font-weight="700" fill="${isStar ? '#8C5800' : isWin ? '#18623D' : '#1A4E4B'}">${faceLabels[idx]}</text>`
-        : '';
-      return `<rect x="${x + 1.5}" y="${y + 1.5}" width="${s - 3}" height="${s - 3}" rx="5" fill="${fill}" stroke="${stroke}" stroke-width="2.2"/>${label}`;
+      const isCollide = revealFold && collideSet.has(idx);
+      const role = foldInfo && foldInfo.faceRoles[idx];
+      const isFloor = revealFold && !isCollide && role === 'Floor';
+      const isLid = revealFold && !isCollide && role === 'Lid';
+
+      let fill = isStar ? '#FFE499' : isWin ? '#D6F3E3' : '#E3F3F2';
+      let stroke = isStar ? '#C98A10' : isWin ? '#2F9E66' : '#2E9690';
+      if (isCollide) {
+        fill = '#FAD9CF';
+        stroke = '#D94E2A';
+      } else if (isLid) {
+        fill = '#C9F0DB';
+        stroke = '#238252';
+      } else if (isFloor) {
+        fill = '#FFE499';
+        stroke = '#C98A10';
+      }
+
+      let innerText = '';
+      if (faceLabels) {
+        const yOff = revealFold ? s / 2 + 1 : s / 2 + 6;
+        const textFill = isCollide ? '#9C2D12' : isStar || isFloor ? '#8C5800' : isWin || isLid ? '#18623D' : '#1A4E4B';
+        innerText += `<text x="${x + s / 2}" y="${y + yOff}" text-anchor="middle" font-family="Fredoka, sans-serif" font-size="${isStar ? 20 : 17}" font-weight="700" fill="${textFill}">${faceLabels[idx]}</text>`;
+        if (revealFold) {
+          const tag = isCollide ? 'HIT!' : isFloor ? 'BASE' : isLid ? 'TOP' : 'WALL';
+          innerText += `<text x="${x + s / 2}" y="${y + s - 6}" text-anchor="middle" font-family="Lexend, sans-serif" font-size="8" font-weight="700" fill="${textFill}">${tag}</text>`;
+        }
+      } else if (revealFold) {
+        const tag = isCollide ? 'HIT!' : isFloor ? 'BASE' : isLid ? 'TOP' : 'WALL';
+        const textFill = isCollide ? '#9C2D12' : isFloor ? '#8C5800' : isLid ? '#18623D' : '#1A4E4B';
+        innerText = `<text x="${x + s / 2}" y="${y + s / 2 + 4}" text-anchor="middle" font-family="Lexend, sans-serif" font-size="10.5" font-weight="700" fill="${textFill}">${tag}</text>`;
+      }
+
+      return `<rect x="${x + 1.5}" y="${y + 1.5}" width="${s - 3}" height="${s - 3}" rx="5" fill="${fill}" stroke="${stroke}" stroke-width="${isCollide || isLid ? 2.6 : 2.2}"/>${innerText}`;
     })
     .join('');
 
@@ -409,7 +460,35 @@ function renderCubeNetSvg(cells, faceLabels = null, highlightLabel = null) {
     }
   }
 
-  return `<svg class="net-svg" viewBox="0 0 ${w} ${h}" style="max-width:${Math.min(300, w * 1.15)}px;" role="img" aria-label="Flat 6-square cube net">${squares}${creases.join('')}</svg>`;
+  return `<svg class="net-svg" viewBox="0 0 ${w} ${h}" style="max-width:${Math.min(310, w * 1.15)}px;" role="img" aria-label="Flat 6-square cube net">${squares}${creases.join('')}</svg>`;
+}
+
+function renderFoldedResultBadge(isValid, topLabel = 'TOP') {
+  if (!isValid) {
+    return `
+      <div class="net-fold-badge invalid animate-pop">
+        <span class="net-fold-icon" aria-hidden="true">✕</span>
+        <div>
+          <strong>Faces Collide!</strong>
+          <div style="font-size:0.78rem;color:var(--ink-secondary);">The red <b>HIT!</b> flaps fold into the exact same 3D spot.</div>
+        </div>
+      </div>
+    `;
+  }
+  return `
+    <div class="net-fold-badge valid animate-pop">
+      <svg width="48" height="48" viewBox="0 0 64 64" aria-hidden="true">
+        <path d="M32 10L52 21L32 32L12 21Z" fill="#C9F0DB" stroke="#238252" stroke-width="2.2" stroke-linejoin="round"/>
+        <path d="M12 21L32 32V54L12 43Z" fill="#D2ECEA" stroke="#1E6863" stroke-width="2.2" stroke-linejoin="round"/>
+        <path d="M52 21L32 32V54L52 43Z" fill="#B5DFDC" stroke="#1E6863" stroke-width="2.2" stroke-linejoin="round"/>
+        <text x="32" y="24" text-anchor="middle" font-family="Fredoka, sans-serif" font-size="11" font-weight="700" fill="#18623D">${topLabel}</text>
+      </svg>
+      <div>
+        <strong>Folds Cleanly into a Cube!</strong>
+        <div style="font-size:0.78rem;color:var(--ink-secondary);">Gold = Base · Teal = 4 Walls · Green = Top Lid</div>
+      </div>
+    </div>
+  `;
 }
 
 export function renderRound(container, round, callbacks) {
@@ -433,6 +512,7 @@ export function renderRound(container, round, callbacks) {
   card.innerHTML = `
     <span class="game-pillar-tag visualize">${round.kind === 'cube-net-valid' ? '3D Cube Net Test' : '3D Opposite Face'}</span>
     <div id="net-svg-slot">${renderCubeNetSvg(round.cells, round.faceLabels || null)}</div>
+    <div id="net-fold-slot"></div>
   `;
   wrap.appendChild(card);
 
@@ -454,6 +534,10 @@ export function renderRound(container, round, callbacks) {
         if (opt.key === round.isValid) {
           solved = true;
           btn.classList.add('is-correct');
+          const slot = card.querySelector('#net-svg-slot');
+          const badgeSlot = card.querySelector('#net-fold-slot');
+          if (slot) slot.innerHTML = renderCubeNetSvg(round.cells, null, null, true);
+          if (badgeSlot) badgeSlot.innerHTML = renderFoldedResultBadge(round.isValid, 'TOP');
           callbacks.onCorrect(
             !hadMistake,
             round.isValid
@@ -481,7 +565,9 @@ export function renderRound(container, round, callbacks) {
           solved = true;
           btn.classList.add('is-correct');
           const slot = card.querySelector('#net-svg-slot');
-          if (slot) slot.innerHTML = renderCubeNetSvg(round.cells, round.faceLabels, letter);
+          const badgeSlot = card.querySelector('#net-fold-slot');
+          if (slot) slot.innerHTML = renderCubeNetSvg(round.cells, round.faceLabels, letter, true);
+          if (badgeSlot) badgeSlot.innerHTML = renderFoldedResultBadge(true, letter);
           callbacks.onCorrect(!hadMistake, `Awesome 3D folding! Face ${letter} lands right on top, opposite the ★.`);
         } else {
           hadMistake = true;
@@ -506,6 +592,7 @@ function renderTileFitRound(container, round, callbacks) {
     placedAt: null, // array of [r, c] on board when placed
   }));
   let selectedId = piecesState[0].id;
+  let hoverAnchor = null;
   let solved = false;
   let hadMistake = false;
 
@@ -523,22 +610,81 @@ function renderTileFitRound(container, round, callbacks) {
     );
   }
 
-  function tryPlaceAt(anchorR, anchorC) {
+  function findPlacement(anchorR, anchorC) {
     const piece = piecesState.find((p) => p.id === selectedId);
-    if (!piece || piece.placedAt) return false;
-    // Try aligning ANY cell of the selected piece to the tapped square so placement feels super forgiving!
+    if (!piece || piece.placedAt) return null;
+    // Try aligning ANY cell of the selected piece to the anchor square so placement feels super forgiving!
     for (const [refR, refC] of piece.curCells) {
       const mapped = piece.curCells.map(([pr, pc]) => [anchorR + pr - refR, anchorC + pc - refC]);
       const valid = mapped.every(([r, c]) => targetSet.has(`${r},${c}`) && !ownerAt(r, c));
-      if (valid) {
-        piece.placedAt = mapped;
-        // Auto-select next unplaced piece
-        const nextFree = piecesState.find((p) => !p.placedAt);
-        selectedId = nextFree ? nextFree.id : null;
-        return true;
+      if (valid) return { piece, cells: mapped, valid: true };
+    }
+    const [r0, c0] = piece.curCells[0];
+    const fallback = piece.curCells
+      .map(([pr, pc]) => [anchorR + pr - r0, anchorC + pc - c0])
+      .filter(([r, c]) => targetSet.has(`${r},${c}`) && !ownerAt(r, c));
+    return { piece, cells: fallback, valid: false };
+  }
+
+  function tryPlaceAt(anchorR, anchorC) {
+    const res = findPlacement(anchorR, anchorC);
+    if (!res || !res.valid) return false;
+    res.piece.placedAt = res.cells;
+    const nextFree = piecesState.find((p) => !p.placedAt);
+    selectedId = nextFree ? nextFree.id : null;
+    hoverAnchor = null;
+    return true;
+  }
+
+  function rotateSelected() {
+    if (solved || selectedId === null) return;
+    const piece = piecesState.find((p) => p.id === selectedId);
+    if (!piece || piece.placedAt) return;
+    callbacks.playClick();
+    piece.curCells = rotP90(piece.curCells);
+    render();
+  }
+
+  // Keyboard shortcut: press R to rotate selected piece!
+  if (round.allowRotate && callbacks.registerCleanup) {
+    const onKey = (e) => {
+      if (solved || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+      const modalRoot = document.getElementById('modal-root');
+      if (modalRoot && modalRoot.childElementCount > 0) return;
+      if (e.key === 'r' || e.key === 'R') {
+        e.preventDefault();
+        rotateSelected();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    callbacks.registerCleanup(() => window.removeEventListener('keydown', onKey));
+  }
+
+  const cellBtnMap = new Map();
+
+  function paintGhostPreview() {
+    cellBtnMap.forEach((btn) => {
+      btn.classList.remove('ghost-valid', 'ghost-invalid');
+      if (!btn.classList.contains('filled')) {
+        btn.style.removeProperty('--ghost-fill');
+        btn.style.removeProperty('--ghost-stroke');
+      }
+    });
+    if (solved || !hoverAnchor || selectedId === null) return;
+    const res = findPlacement(hoverAnchor[0], hoverAnchor[1]);
+    if (!res) return;
+    for (const [r, c] of res.cells) {
+      const btn = cellBtnMap.get(`${r},${c}`);
+      if (!btn || btn.classList.contains('filled')) continue;
+      if (res.valid) {
+        btn.classList.add('ghost-valid');
+        btn.style.setProperty('--ghost-fill', res.piece.color.fill);
+        btn.style.setProperty('--ghost-stroke', res.piece.color.stroke);
+      } else {
+        btn.classList.add('ghost-invalid');
       }
     }
-    return false;
   }
 
   function render() {
@@ -547,8 +693,14 @@ function renderTileFitRound(container, round, callbacks) {
     wrap.innerHTML = `
       <div class="composer-board" style="grid-template-columns: repeat(${round.boardCols}, var(--comp-cell-size, 54px));" id="comp-board"></div>
       <div class="composer-tray" id="comp-tray"></div>
-      <div style="font-size:0.8rem;color:var(--ink-muted);">
-        ${filledCount > 0 && !solved ? 'Tip: Tap any placed piece on the board to lift it back up.' : 'Pick a piece below, then tap an empty outline square.'}
+      <div style="font-size:0.8rem;color:var(--ink-muted);text-align:center;">
+        ${
+          filledCount > 0 && !solved
+            ? 'Tip: Tap any placed piece on the board to lift it back up.'
+            : round.allowRotate
+              ? 'Pick a piece below, then hover & tap an empty square (press R to rotate).'
+              : 'Pick a piece below, then tap an empty outline square.'
+        }
       </div>
       <div class="rotate-controls">
         ${
@@ -560,7 +712,13 @@ function renderTileFitRound(container, round, callbacks) {
       </div>
     `;
 
+    cellBtnMap.clear();
     const boardEl = wrap.querySelector('#comp-board');
+    boardEl.addEventListener('pointerleave', () => {
+      hoverAnchor = null;
+      paintGhostPreview();
+    });
+
     for (let r = 0; r < round.boardRows; r++) {
       for (let c = 0; c < round.boardCols; c++) {
         const key = `${r},${c}`;
@@ -580,12 +738,21 @@ function renderTileFitRound(container, round, callbacks) {
           btn.title = 'Tap to lift this piece back to the tray';
         }
         btn.setAttribute('aria-label', `Board row ${r + 1}, col ${c + 1}`);
+        cellBtnMap.set(key, btn);
+
+        btn.addEventListener('pointerenter', (ev) => {
+          if (ev.pointerType === 'touch' || solved || owner) return;
+          hoverAnchor = [r, c];
+          paintGhostPreview();
+        });
+
         btn.addEventListener('click', () => {
           if (solved) return;
           if (owner) {
             callbacks.playClick();
             owner.placedAt = null;
             selectedId = owner.id;
+            hoverAnchor = null;
             render();
             return;
           }
@@ -632,14 +799,7 @@ function renderTileFitRound(container, round, callbacks) {
 
     const rotBtn = wrap.querySelector('#btn-comp-rot');
     if (rotBtn) {
-      rotBtn.addEventListener('click', () => {
-        if (solved || selectedId === null) return;
-        const piece = piecesState.find((p) => p.id === selectedId);
-        if (!piece || piece.placedAt) return;
-        callbacks.playClick();
-        piece.curCells = rotP90(piece.curCells);
-        render();
-      });
+      rotBtn.addEventListener('click', rotateSelected);
     }
 
     wrap.querySelector('#btn-comp-reset').addEventListener('click', () => {
@@ -649,8 +809,11 @@ function renderTileFitRound(container, round, callbacks) {
         p.placedAt = null;
       });
       selectedId = piecesState[0].id;
+      hoverAnchor = null;
       render();
     });
+
+    paintGhostPreview();
   }
 
   render();

@@ -1915,3 +1915,325 @@
     padding: 16px 18px;
   }
 }
+
+/* =========================================================================
+   Track 1 & 2 Additions: Insights, 3D Fold Reveal, Ghost Snap, Build Mode, Cousins
+   ========================================================================= */
+
+/* Parent Corner: Local Difficulty & Friction Insights */
+.insights-block {
+  padding-top: 8px;
+  border-top: 1px dashed var(--border-soft);
+}
+
+.insights-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.insight-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  border: 1px solid var(--border-soft);
+}
+
+.insight-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.insight-main strong {
+  font-size: 0.88rem;
+  color: var(--ink-primary);
+}
+
+.insight-meta {
+  font-size: 0.76rem;
+  color: var(--ink-muted);
+}
+
+.insight-pill {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.insight-pill.flow {
+  background: var(--wordcraft-soft);
+  color: var(--wordcraft-dark);
+}
+
+.insight-pill.easy {
+  background: var(--analyze-soft);
+  color: var(--warm-hint-ink);
+}
+
+.insight-pill.hard {
+  background: var(--compute-soft);
+  color: var(--compute-dark);
+}
+
+.insight-pill.gathering {
+  background: var(--bg-soft);
+  color: var(--ink-muted);
+}
+
+/* Shape Composer: 3D Fold-Up Result Badge & Tile-Fit Ghost Preview */
+.net-fold-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  text-align: left;
+  max-width: 100%;
+}
+
+.net-fold-badge.valid {
+  background: #eaf8f0;
+  border: 1.5px solid #8bd4ac;
+  color: #18623d;
+}
+
+.net-fold-badge.invalid {
+  background: #fdf0ec;
+  border: 1.5px solid #efb09e;
+  color: #9c2d12;
+}
+
+.net-fold-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #fad9cf;
+  color: #b54729;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.15rem;
+  flex-shrink: 0;
+}
+
+.comp-cell.socket.ghost-valid {
+  background: color-mix(in srgb, var(--ghost-fill, #2e9690) 34%, white);
+  border-style: solid;
+  border-color: var(--ghost-stroke, #1b615d);
+  transform: scale(1.03);
+}
+
+.comp-cell.socket.ghost-invalid {
+  background: rgba(228, 107, 73, 0.16);
+  border-color: #d94e2a;
+}
+
+/* Cube Architect: Reverse Architect Build Mode */
+.build-compare {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  width: 100%;
+  max-width: 640px;
+}
+
+.build-panel {
+  background: var(--bg-soft);
+  border: 1.5px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  padding: 12px 12px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  transition: border-color 180ms ease, background 180ms ease;
+}
+
+.build-panel.matched {
+  border-color: var(--success);
+  background: #eefaf3;
+}
+
+.build-panel-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--ink-secondary);
+}
+
+.build-svg-slot {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.build-svg-slot svg {
+  width: 100%;
+  max-height: 205px;
+  height: auto;
+}
+
+.build-pad-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 18px 12px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-soft);
+  border: 1.5px solid var(--border-soft);
+}
+
+.build-pad-hint {
+  font-size: 0.8rem;
+  color: var(--ink-muted);
+  text-align: center;
+}
+
+.build-pad {
+  display: grid;
+  gap: 8px;
+}
+
+.build-cell {
+  width: 62px;
+  height: 62px;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--border-strong);
+  background: var(--surface-card);
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: var(--ink-primary);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 3px 0 rgba(35, 39, 51, 0.08);
+  transition: transform 110ms var(--ease-spring), background 140ms ease, border-color 140ms ease;
+}
+
+.build-cell:hover {
+  transform: translateY(-2px);
+}
+
+.build-cell:active {
+  transform: translateY(1px);
+}
+
+.build-cell-zero {
+  color: var(--ink-muted);
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+.build-cell.h-1 {
+  background: #d7f0ee;
+  border-color: #2e9690;
+  color: #185854;
+}
+
+.build-cell.h-2 {
+  background: #fdecc4;
+  border-color: #d99b1e;
+  color: #7c5404;
+}
+
+.build-cell.h-3 {
+  background: #fbd9ce;
+  border-color: #da6443;
+  color: #962f14;
+}
+
+.build-cell.h-4 {
+  background: #d5f0de;
+  border-color: #4d9b67;
+  color: #1f5c35;
+}
+
+.build-front-bar {
+  width: 100%;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #b54729;
+  padding-top: 6px;
+  border-top: 4px solid #e46b49;
+  border-radius: 2px;
+}
+
+/* Word Builder: Word Family Cousins Reveal */
+.word-family-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border-soft);
+}
+
+.word-family-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--ink-muted);
+  margin-right: 2px;
+}
+
+.word-family-chip {
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--wordcraft-soft);
+  border: 1px solid #b5dfc4;
+  color: var(--wordcraft-dark);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+@media (max-width: 600px) {
+  .build-compare {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .build-panel {
+    padding: 8px 6px 6px;
+  }
+
+  .build-panel-label {
+    font-size: 0.66rem;
+    text-align: center;
+  }
+
+  .build-svg-slot svg {
+    max-height: 126px;
+  }
+
+  .build-pad-wrap {
+    padding: 10px 12px;
+  }
+
+  .build-cell {
+    width: 52px;
+    height: 52px;
+    font-size: 1.3rem;
+  }
+
+  .insight-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+

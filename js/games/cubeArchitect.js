@@ -224,6 +224,73 @@ function layerCounts(grid) {
   return counts;
 }
 
+/**
+ * Generates a strictly monotone 3x3 stepped 3D tower (grid[r][c] >= grid[r+1][c] and >= grid[r][c+1])
+ * so every single column's height and every empty floor cell is 100% unambiguously visible!
+ */
+function generateBuildStructure(tier) {
+  const maxAllowedH = tier >= 4 ? 4 : 3;
+  const minTotal = tier >= 4 ? 11 : 8;
+  const maxTotal = tier >= 4 ? 20 : 14;
+
+  for (let attempt = 0; attempt < 240; attempt++) {
+    const grid = [
+      [0, 0, 0],
+      [0, 0, 0],
+      [0, 0, 0],
+    ];
+    grid[0][0] = tier >= 4 ? randInt(3, 4) : 3;
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 3; c++) {
+        if (r === 0 && c === 0) continue;
+        const boundR = r > 0 ? grid[r - 1][c] : maxAllowedH;
+        const boundC = c > 0 ? grid[r][c - 1] : maxAllowedH;
+        const upper = Math.min(boundR, boundC);
+        grid[r][c] = upper > 0 ? randInt(0, upper) : 0;
+      }
+    }
+    let total = 0;
+    let baseCount = 0;
+    let maxH = 0;
+    const heights = new Set();
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 3; c++) {
+        const h = grid[r][c];
+        total += h;
+        if (h > 0) {
+          baseCount += 1;
+          heights.add(h);
+        }
+        if (h > maxH) maxH = h;
+      }
+    }
+    if (
+      total >= minTotal &&
+      total <= maxTotal &&
+      baseCount >= 4 &&
+      baseCount <= 8 &&
+      maxH >= 3 &&
+      heights.size >= (tier >= 4 ? 3 : 2)
+    ) {
+      return { grid, total, maxH, baseCount, maxAllowedH };
+    }
+  }
+
+  const fallback =
+    tier >= 4
+      ? [[4, 3, 1], [3, 2, 0], [1, 0, 0]]
+      : [[3, 2, 1], [2, 1, 0], [1, 0, 0]];
+  let total = 0;
+  let baseCount = 0;
+  for (const row of fallback) {
+    for (const h of row) {
+      total += h;
+      if (h > 0) baseCount += 1;
+    }
+  }
+  return { grid: fallback, total, maxH: maxAllowedH, baseCount, maxAllowedH };
+}
+
 export function generateSession(tier = 1, profile = null) {
   const scopeKey = `cube-architect:${tier}`;
   const recentSigs = getRecentPuzzleSigs(profile, scopeKey);
@@ -234,12 +301,14 @@ export function generateSession(tier = 1, profile = null) {
   const gridSig = (g) => g.map((r) => r.join('')).join('/');
 
   for (let i = 0; i < totalRounds; i++) {
-    const isTopView = tier >= 3 && (i === 2 || i === 4);
+    const isBuild = tier >= 3 && i === 4;
+    const isTopView = tier >= 3 && (i === 1 || i === 3);
     let struct = null;
     let fallback = null;
     for (let a = 0; a < 20; a++) {
-      const cand = generateStructure(tier);
-      const sig = `${isTopView ? 'tv' : 'cnt'}:${gridSig(cand.grid)}`;
+      const cand = isBuild ? generateBuildStructure(tier) : generateStructure(tier);
+      const prefix = isBuild ? 'bld' : isTopView ? 'tv' : 'cnt';
+      const sig = `${prefix}:${gridSig(cand.grid)}`;
       if (!sessionSigs.has(sig)) {
         fallback = { cand, sig };
         if (!recentSigs.includes(sig)) {
@@ -250,13 +319,27 @@ export function generateSession(tier = 1, profile = null) {
       }
     }
     if (!struct) {
-      struct = fallback ? fallback.cand : generateStructure(tier);
+      struct = fallback ? fallback.cand : isBuild ? generateBuildStructure(tier) : generateStructure(tier);
       if (fallback) sessionSigs.add(fallback.sig);
     }
 
     const layers = layerCounts(struct.grid);
 
-    if (isTopView) {
+    if (isBuild) {
+      rounds.push({
+        kind: 'build',
+        grid: struct.grid,
+        total: struct.total,
+        maxH: struct.maxH,
+        maxAllowedH: struct.maxAllowedH || (tier >= 4 ? 4 : 3),
+        layers,
+        prompt: 'Architect Challenge! Stack blocks on the mat to match the 3D tower!',
+        speakPrompt:
+          'Architect challenge! Tap the squares on the blueprint pad to stack blocks until your 3D tower matches the target!',
+        strategyTip:
+          'Match the coral FRONT EDGE first! Start from the tallest back-left corner and step down column by column.',
+      });
+    } else if (isTopView) {
       const options = makeTopViewDistractors(struct.grid);
       const correctIdx = options.findIndex((o) => o.isCorrect);
       rounds.push({
@@ -301,7 +384,7 @@ const LAYER_PALETTES = [
   { top: '#78BF8E', left: '#4D9B67', right: '#33754A' }, // Layer 4 (Sage)
 ];
 
-function renderIsometricSvg(grid, exploded = false, showOrientationBar = false) {
+function renderIsometricSvg(grid, exploded = false, showOrientationBar = false, fixedMaxH = 0) {
   const n = grid.length;
   const dx = n >= 4 ? 22 : 26;
   const dy = n >= 4 ? 12.5 : 15;
@@ -324,7 +407,7 @@ function renderIsometricSvg(grid, exploded = false, showOrientationBar = false) 
         const cy = (c + r) * dy;
         minX = Math.min(minX, cx - dx);
         maxX = Math.max(maxX, cx + dx);
-        minY = Math.min(minY, cy - dy);
+        minY = Math.min(minY, cy - dy - Math.max(0, fixedMaxH - 1) * dz);
         maxY = Math.max(maxY, cy + dy + dz);
       }
     }
@@ -355,7 +438,7 @@ function renderIsometricSvg(grid, exploded = false, showOrientationBar = false) 
   const offsetX = (vbW - contentW) / 2 - minX;
   const offsetY = (vbH - contentH - (showOrientationBar ? 24 : 8)) / 2 - minY;
 
-  // Subtle floor grid + coral front edge bar for Top-View rounds so 3D-to-2D orientation is 100% unambiguous!
+  // Subtle floor grid + coral front edge bar for Top-View & Build rounds so 3D-to-2D orientation is 100% unambiguous!
   let floorMarkup = '';
   if (showOrientationBar) {
     const tiles = [];
@@ -454,7 +537,119 @@ function renderTopViewSvg(footprint) {
   return `<svg class="topview-option-svg" viewBox="0 0 ${width} ${height}" aria-hidden="true">${rects.join('')}${frontBar}</svg>`;
 }
 
+function renderBuildRound(container, round, callbacks) {
+  const n = round.grid.length;
+  const maxAllowedH = round.maxAllowedH || 3;
+  const userGrid = Array.from({ length: n }, () => Array(n).fill(0));
+  let solved = false;
+  let hadMistake = false;
+  let mismatchKeys = new Set();
+
+  const wrap = document.createElement('div');
+  wrap.className = 'cube-stage-wrap';
+  container.appendChild(wrap);
+
+  function userTotal() {
+    return userGrid.flat().reduce((a, b) => a + b, 0);
+  }
+
+  function render() {
+    const curTotal = userTotal();
+    wrap.innerHTML = `
+      <div class="build-compare">
+        <div class="build-panel">
+          <span class="build-panel-label">Target 3D Tower</span>
+          <div class="build-svg-slot">${renderIsometricSvg(round.grid, false, true, maxAllowedH)}</div>
+        </div>
+        <div class="build-panel ${solved ? 'matched' : ''}">
+          <span class="build-panel-label">Your Live Build · ${curTotal} ${curTotal === 1 ? 'cube' : 'cubes'}</span>
+          <div class="build-svg-slot">${renderIsometricSvg(userGrid, false, true, maxAllowedH)}</div>
+        </div>
+      </div>
+
+      <div class="build-pad-wrap">
+        <div class="build-pad-hint">Tap a square to stack +1 cube (0 to ${maxAllowedH}, wraps back to 0)</div>
+        <div class="build-pad" id="build-pad" style="grid-template-columns: repeat(${n}, 1fr);"></div>
+        <div class="build-front-bar">FRONT EDGE</div>
+      </div>
+
+      <div class="rotate-controls">
+        <button type="button" class="btn btn-secondary" id="btn-build-clear" ${curTotal === 0 || solved ? 'disabled' : ''}>Clear Mat</button>
+        <button type="button" class="btn btn-primary" id="btn-build-check" ${solved ? 'disabled' : ''}>Check My Build!</button>
+      </div>
+    `;
+
+    const padEl = wrap.querySelector('#build-pad');
+    for (let r = 0; r < n; r++) {
+      for (let c = 0; c < n; c++) {
+        const h = userGrid[r][c];
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `build-cell ${h > 0 ? `h-${h}` : ''} ${mismatchKeys.has(`${r},${c}`) ? 'hint-pulse' : ''}`;
+        btn.dataset.r = String(r);
+        btn.dataset.c = String(c);
+        btn.setAttribute('aria-label', `Row ${r + 1}, Column ${c + 1}: height ${h}`);
+        btn.innerHTML = h > 0 ? `<span class="build-cell-num">${h}</span>` : '<span class="build-cell-zero">·</span>';
+        btn.addEventListener('click', () => {
+          if (solved) return;
+          callbacks.playClick();
+          userGrid[r][c] = (userGrid[r][c] + 1) % (maxAllowedH + 1);
+          mismatchKeys.delete(`${r},${c}`);
+          render();
+        });
+        btn.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          if (solved) return;
+          callbacks.playClick();
+          userGrid[r][c] = userGrid[r][c] > 0 ? userGrid[r][c] - 1 : maxAllowedH;
+          mismatchKeys.delete(`${r},${c}`);
+          render();
+        });
+        padEl.appendChild(btn);
+      }
+    }
+
+    wrap.querySelector('#btn-build-clear').addEventListener('click', () => {
+      if (solved) return;
+      callbacks.playClick();
+      for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) userGrid[r][c] = 0;
+      mismatchKeys.clear();
+      render();
+    });
+
+    wrap.querySelector('#btn-build-check').addEventListener('click', () => {
+      if (solved) return;
+      const wrong = [];
+      for (let r = 0; r < n; r++) {
+        for (let c = 0; c < n; c++) {
+          if (userGrid[r][c] !== round.grid[r][c]) wrong.push(`${r},${c}`);
+        }
+      }
+      if (wrong.length === 0) {
+        solved = true;
+        mismatchKeys.clear();
+        render();
+        callbacks.onCorrect(!hadMistake, `Master builder! All ${round.total} cubes match the 3D tower exactly.`);
+      } else {
+        hadMistake = true;
+        mismatchKeys = new Set(wrong);
+        render();
+        callbacks.onRetry(
+          `Close! ${wrong.length} highlighted ${wrong.length === 1 ? 'square has' : 'squares have'} a different stack height than the target.`
+        );
+      }
+    });
+  }
+
+  render();
+}
+
 export function renderRound(container, round, callbacks) {
+  if (round.kind === 'build') {
+    renderBuildRound(container, round, callbacks);
+    return;
+  }
+
   let exploded = false;
   let solved = false;
   let hadMistake = false;

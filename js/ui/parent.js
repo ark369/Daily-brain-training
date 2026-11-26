@@ -16,6 +16,8 @@ import {
   saveState,
   getTrickyFacts,
   getTierUpRecommendations,
+  getDifficultyInsights,
+  clearRoundTelemetry,
   exportStateJson,
   importStateJson,
 } from '../storage.js';
@@ -242,6 +244,41 @@ export function openParentModal(modalRoot, state, handlers) {
                         : '<span style="font-size:0.82rem;color:var(--ink-muted);">All practiced facts are smooth right now (or play Fact Studio to start tracking!).</span>'
                     }
                   </div>
+
+                  ${(() => {
+                    const insights = getDifficultyInsights(p, GAMES);
+                    const totalLogged = (p.roundHistory || []).length;
+                    return `
+                      <div class="insights-block">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+                          <span class="field-label">Difficulty &amp; Friction Insights (${totalLogged} rounds logged locally)</span>
+                          ${
+                            totalLogged > 0
+                              ? `<button type="button" class="btn btn-ghost" data-clear-telemetry="${escapeHtml(p.id)}" style="min-height:28px;padding:2px 8px;font-size:0.76rem;color:var(--ink-muted);">Clear Log</button>`
+                              : ''
+                          }
+                        </div>
+                        ${
+                          insights.length > 0
+                            ? `<div class="insights-grid">
+                                ${insights
+                                  .slice(0, 8)
+                                  .map(
+                                    (ins) => `
+                                      <div class="insight-row">
+                                        <div class="insight-main">
+                                          <strong>${escapeHtml(ins.title)}</strong>
+                                          <span class="insight-meta">T${ins.tier} · ${ins.total} ${ins.total === 1 ? 'rd' : 'rds'} · ${ins.firstTryPct}% 1st-try · ${ins.medianSec}s med${ins.tipPct > 0 ? ` · ${ins.tipPct}% tips` : ''}</span>
+                                        </div>
+                                        <span class="insight-pill ${ins.status}">${escapeHtml(ins.statusLabel)}</span>
+                                      </div>`
+                                  )
+                                  .join('')}
+                               </div>`
+                            : '<span style="font-size:0.82rem;color:var(--ink-muted);">Play a few rounds to see which games sit in the Flow Zone (65–90% 1st-try), feel Too Easy, or need extra scaffolding.</span>'
+                        }
+                      </div>`;
+                  })()}
                 </div>
               `;
             })
@@ -429,6 +466,14 @@ export function openParentModal(modalRoot, state, handlers) {
           saveState(state);
           const pilName = (PILLARS.find((x) => x.id === pilId) || { name: pilId }).name;
           handlers.onToast(`Promoted ${targetProf.name}'s ${pilName} pillar to ${getTierInfo(nextTier).name}!`);
+          render();
+        });
+      });
+
+      modalRoot.querySelectorAll('[data-clear-telemetry]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          clearRoundTelemetry(state, btn.dataset.clearTelemetry);
+          handlers.onToast('Cleared local round insights');
           render();
         });
       });

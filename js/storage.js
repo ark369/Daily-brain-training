@@ -59,6 +59,7 @@ function createProfile({ id, name, avatar, tier, readAloud = false, calmMode = f
     factHistory: {}, // { '7x6': { box, attempts, misses, lastMs, avgMs, lastSeenDay } }
     wordHistory: {}, // { 'wb:t3:telescope': { box, attempts, misses, dueDay, lastSeenDay, lastSeenAt } }
     recentPuzzles: {}, // { 'balance-lab:3': ['alg:2:5:3', ...] } persisted rolling freshness buffer
+    roundHistory: [], // local-only per-round timing & first-try telemetry (capped at 300)
     unlockedBadges: [], // non-punitive competence badges
   };
 }
@@ -127,8 +128,10 @@ function hydrateState(parsed) {
       factHistory: {},
       wordHistory: {},
       recentPuzzles: {},
+      roundHistory: [],
       unlockedBadges: [],
       ...p,
+      roundHistory: Array.isArray(p.roundHistory) ? p.roundHistory.slice(-300) : [],
       name: typeof p.name === 'string' && p.name.trim() ? p.name.trim() : 'Explorer',
       avatar: typeof p.avatar === 'string' && p.avatar.trim() ? p.avatar : 'fox',
       tier,
@@ -599,6 +602,98 @@ export function recordRecentPuzzleSigs(profile, scopeKey, sigs, maxLen = 30) {
 export function getGameStage(profile, gameId) {
   const m = profile && profile.gameMastery && profile.gameMastery[gameId];
   return Math.max(1, Math.min(3, Number((m && m.stage) || 1)));
+}
+
+/**
+ * Local-only per-round difficulty & friction telemetry (never leaves device; included in Backup JSON).
+ */
+export function recordRoundTelemetry(
+  state,
+  profileId,
+  { gameId, tier, subtype = 'default', firstTry = true, timeMs = 0, usedTip = false, todayKey = getTodayKey() }
+) {
+  const profile = state && state.profiles && state.profiles.find((p) => p.id === profileId);
+  if (!profile) return;
+  if (!Array.isArray(profile.roundHistory)) profile.roundHistory = [];
+  profile.roundHistory.push({
+    g: String(gameId),
+    t: Math.max(1, Math.min(4, Number(tier) || 1)),
+    s: String(subtype || 'default').slice(0, 32),
+    ok: Boolean(firstTry),
+    ms: Math.max(0, Math.min(300000, Math.round(Number(timeMs) || 0))),
+    tip: Boolean(usedTip),
+    d: todayKey,
+  });
+  if (profile.roundHistory.length > 300) {
+    profile.roundHistory.splice(0, profile.roundHistory.length - 300);
+  }
+  saveState(state);
+}
+
+export function clearRoundTelemetry(state, profileId) {
+  const profile = state && state.profiles && state.profiles.find((p) => p.id === profileId);
+  if (!profile) return;
+  profile.roundHistory = [];
+  saveState(state);
+}
+
+export function getDifficultyInsights(profile, games) {
+  const hist = (profile && Array.isArray(profile.roundHistory) && profile.roundHistory) || [];
+  if (hist.length === 0) return [];
+  const byKey = new Map();
+  for (const row of hist) {
+    const key = `${row.g}|${row.t}`;
+    if (!byKey.has(key)) {
+      byKey.set(key, { gameId: row.g, tier: row.t, times: [], okCount: 0, tipCount: 0, total: 0 });
+    }
+    const agg = byKey.get(key);
+    agg.total += 1;
+    if (row.ok) agg.okCount += 1;
+    if (row.tip) agg.tipCount += 1;
+    if (row.ms > 0) agg.times.push(row.ms);
+  }
+
+  const results = [];
+  for (const agg of byKey.values()) {
+    const game = games.find((gm) => gm.meta.id === agg.gameId);
+    const firstTryPct = Math.round((agg.okCount / agg.total) * 100);
+    const tipPct = Math.round((agg.tipCount / agg.total) * 100);
+    const sorted = [...agg.times].sort((a, b) => a - b);
+    const medianMs = sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0;
+    const medianSec = Number((medianMs / 1000).toFixed(1));
+
+    let status = 'gathering';
+    let statusLabel = 'Gathering data';
+    if (agg.total >= 3) {
+      if (firstTryPct < 60) {
+        status = 'hard';
+        statusLabel = 'Spiky / Practice';
+      } else if (agg.total >= 4 && firstTryPct >= 95 && medianSec > 0 && medianSec < 4.5) {
+        status = 'easy';
+        statusLabel = 'Too Easy?';
+      } else {
+        status = 'flow';
+        statusLabel = 'Flow Zone';
+      }
+    }
+
+    results.push({
+      gameId: agg.gameId,
+      title: game ? game.meta.title : agg.gameId,
+      pillar: game ? game.meta.pillar : 'visualize',
+      tier: agg.tier,
+      total: agg.total,
+      firstTryPct,
+      tipPct,
+      medianSec,
+      status,
+      statusLabel,
+    });
+  }
+
+  // Sort: spiky first, then too easy, then flow, then gathering
+  const order = { hard: 0, easy: 1, flow: 2, gathering: 3 };
+  return results.sort((a, b) => order[a.status] - order[b.status] || b.total - a.total);
 }
 
 export function exportStateJson(state) {

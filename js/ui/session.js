@@ -15,7 +15,15 @@ import {
   speakText,
   stopSpeaking,
 } from '../audio.js';
-import { getEffectiveTier, getGameStage, getTierInfo, getTodayKey, recordGameResult, saveState } from '../storage.js';
+import {
+  getEffectiveTier,
+  getGameStage,
+  getTierInfo,
+  getTodayKey,
+  recordGameResult,
+  recordRoundTelemetry,
+  saveState,
+} from '../storage.js';
 import { escapeHtml } from '../games/utils.js';
 
 const OFFLINE_PAIRINGS = {
@@ -305,9 +313,19 @@ export function runGameSession(container, state, profile, gameMod, options, hand
       speakText(currentSpeakText, true);
     });
 
+    let usedTip = false;
+    const roundStartMs = Date.now();
+    const roundSubtype =
+      round.subkind ||
+      round.axis ||
+      round.displayMode ||
+      round.kind ||
+      (round.signature ? String(round.signature).split(':')[0] : 'default');
+
     tipBtn.addEventListener('click', () => {
       playClick();
       const willShow = tipDrawer.hidden;
+      if (willShow) usedTip = true;
       tipDrawer.hidden = !willShow;
       tipBtn.setAttribute('aria-expanded', String(willShow));
       tipBtn.innerHTML = willShow
@@ -318,7 +336,7 @@ export function runGameSession(container, state, profile, gameMod, options, hand
       }
     });
 
-    // Keyboard shortcuts (1-4 for choice buttons when not using Fact Studio's keypad)
+    // Keyboard shortcuts (1-4 choices, T for Strategy Tip, Enter for Next Puzzle)
     if (!isCustomFlow) {
       sessionKeyHandler = (e) => {
         if (e.target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
@@ -328,6 +346,11 @@ export function runGameSession(container, state, profile, gameMod, options, hand
         if (nextBtn && e.key === 'Enter') {
           e.preventDefault();
           nextBtn.click();
+          return;
+        }
+        if ((e.key === 't' || e.key === 'T') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+          e.preventDefault();
+          tipBtn.click();
           return;
         }
         if (/^[1-4]$/.test(e.key) && !nextBtn) {
@@ -375,7 +398,14 @@ export function runGameSession(container, state, profile, gameMod, options, hand
         playCorrect();
         totalAttempts += 1;
         if (wasCleanFirstTry) cleanCorrect += 1;
-        saveState(state);
+        recordRoundTelemetry(state, profile.id, {
+          gameId: gameMod.meta.id,
+          tier,
+          subtype: roundSubtype,
+          firstTry: Boolean(wasCleanFirstTry),
+          timeMs: Date.now() - roundStartMs,
+          usedTip,
+        });
 
         const isLast = roundIdx >= rounds.length - 1;
         feedbackSlot.innerHTML = `

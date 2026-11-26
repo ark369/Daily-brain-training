@@ -6,6 +6,8 @@
  */
 
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { GAMES, PILLARS } from '../js/games/index.js';
 import { getDailyMix, getMonthCalendarData } from '../js/daily.js';
 import {
@@ -15,6 +17,9 @@ import {
   getTrickyFacts,
   recordGameResult,
   recordWordAttempt,
+  recordRoundTelemetry,
+  getDifficultyInsights,
+  clearRoundTelemetry,
   getGameStage,
   getTierUpRecommendations,
   exportStateJson,
@@ -128,18 +133,31 @@ for (const game of GAMES) {
 
           if (game.meta.id === 'cube-architect') {
             assert.ok(r.total >= 2, 'Total cubes must be >= 2');
-            if (tier === 4) {
-              assert.equal(r.grid.length, 4, 'Cube Architect T4 must use 4x4 grid');
-              const baseCols = r.grid.flat().filter((h) => h > 0).length;
-              assert.ok(r.total >= 17 && r.total <= 28, `Cube Architect T4 total ${r.total} out of [17, 28]`);
-              assert.ok(r.total - baseCols >= 4, `Cube Architect T4 hidden supports ${r.total - baseCols} must be >= 4`);
-            }
-            if (r.kind === 'count') {
-              assert.equal(new Set(r.choices).size, 4, 'Choices must be 4 unique numbers');
-              assert.ok(r.choices.includes(r.answer), 'Choices must include answer');
+            if (r.kind === 'build') {
+              assert.ok(tier >= 3, 'Cube Architect build mode should appear on Tiers 3–4');
+              assert.equal(r.grid.length, 3, 'Cube Architect build mode must use 3x3 blueprint mat');
+              assert.ok(r.total >= (tier >= 4 ? 11 : 8), `Build total ${r.total} too low for T${tier}`);
+              // Verify strict monotonicity so every column and empty cell is 100% visible
+              for (let row = 0; row < 3; row++) {
+                for (let col = 0; col < 3; col++) {
+                  if (row < 2) assert.ok(r.grid[row][col] >= r.grid[row + 1][col], 'Build tower must be monotone along rows');
+                  if (col < 2) assert.ok(r.grid[row][col] >= r.grid[row][col + 1], 'Build tower must be monotone along cols');
+                }
+              }
             } else {
-              assert.equal(r.options.length, 4);
-              assert.ok(r.correctIdx >= 0 && r.correctIdx < 4);
+              if (tier === 4) {
+                assert.equal(r.grid.length, 4, 'Cube Architect T4 count/topview must use 4x4 grid');
+                const baseCols = r.grid.flat().filter((h) => h > 0).length;
+                assert.ok(r.total >= 17 && r.total <= 28, `Cube Architect T4 total ${r.total} out of [17, 28]`);
+                assert.ok(r.total - baseCols >= 4, `Cube Architect T4 hidden supports ${r.total - baseCols} must be >= 4`);
+              }
+              if (r.kind === 'count') {
+                assert.equal(new Set(r.choices).size, 4, 'Choices must be 4 unique numbers');
+                assert.ok(r.choices.includes(r.answer), 'Choices must include answer');
+              } else {
+                assert.equal(r.options.length, 4);
+                assert.ok(r.correctIdx >= 0 && r.correctIdx < 4);
+              }
             }
           }
 
@@ -432,18 +450,23 @@ for (const game of GAMES) {
   }
 }
 
-// 4. Verify all 11 VALID_CUBE_NETS fold validly and all 8 INVALID_CUBE_NETS fail
-check('Exact 3D cube-net folder validates all 11 valid hexomino nets and rejects all 8 invalid impostors', () => {
+// 4. Verify all 11 VALID_CUBE_NETS fold validly (with Floor/Lid/4 Walls) and all 8 INVALID_CUBE_NETS identify colliding faces
+check('Exact 3D cube-net folder validates all 11 valid hexomino nets, maps 3D roles, and pins colliding faces on all 8 invalid impostors', () => {
   assert.equal(VALID_CUBE_NETS.length, 11);
   assert.equal(INVALID_CUBE_NETS.length, 8);
   for (const net of VALID_CUBE_NETS) {
     const res = foldNet3D(net.cells);
     assert.equal(res.valid, true, `Valid net ${net.name} must fold cleanly`);
     assert.ok(res.oppositeOf0 >= 1 && res.oppositeOf0 <= 5, `Valid net ${net.name} must identify opposite face`);
+    assert.equal(res.collidingIndices.length, 0, `Valid net ${net.name} must have 0 collisions`);
+    assert.equal(res.faceRoles.filter((r) => r === 'Floor').length, 1);
+    assert.equal(res.faceRoles.filter((r) => r === 'Lid').length, 1);
+    assert.equal(res.faceRoles.filter((r) => r === 'Wall').length, 4);
   }
   for (const bad of INVALID_CUBE_NETS) {
     const res = foldNet3D(bad.cells);
     assert.equal(res.valid, false, `Invalid net ${bad.name} must fail to fold into a closed cube`);
+    assert.ok(res.collidingIndices.length >= 2, `Invalid net ${bad.name} must flag >= 2 colliding faces`);
   }
 });
 
@@ -712,11 +735,70 @@ check('Backup JSON export/import migrates legacy v1 profiles cleanly, rejects co
   assert.deepEqual(migrated.profiles[0].wordHistory, {});
   assert.deepEqual(migrated.profiles[0].recentPuzzles, {});
   assert.deepEqual(migrated.profiles[0].gameMastery, {});
+  assert.deepEqual(migrated.profiles[0].roundHistory, []);
 
   // Malformed or empty profiles must throw cleanly
   assert.throws(() => importStateJson('{"profiles": []}'));
   assert.throws(() => importStateJson('{"profiles": [null, "bad"]}'));
   assert.throws(() => importStateJson('not valid json'));
+});
+
+// 11. Verify Local Difficulty & Friction Telemetry aggregation, classification, export/import & clearing
+check('Local round telemetry classifies Flow Zone, Too Easy, and Spiky games accurately and persists cleanly', () => {
+  const st = loadState();
+  const kid = st.profiles[2]; // Challenger
+
+  // 4 fast 100% rounds -> Too Easy?
+  for (let i = 0; i < 4; i++) {
+    recordRoundTelemetry(st, kid.id, { gameId: 'target-forge', tier: 3, subtype: 'two-card', firstTry: true, timeMs: 2800, usedTip: false });
+  }
+  // 4 mixed 75% rounds -> Flow Zone
+  for (let i = 0; i < 4; i++) {
+    recordRoundTelemetry(st, kid.id, { gameId: 'balance-lab', tier: 3, subtype: 'cancel', firstTry: i !== 0, timeMs: 8500, usedTip: i === 0 });
+  }
+  // 3 low-accuracy rounds -> Spiky / Practice
+  for (let i = 0; i < 3; i++) {
+    recordRoundTelemetry(st, kid.id, { gameId: 'clue-grid', tier: 3, subtype: '4x4', firstTry: i === 0, timeMs: 14000, usedTip: true });
+  }
+
+  const insights = getDifficultyInsights(kid, GAMES);
+  assert.equal(insights.length, 3);
+  assert.equal(insights[0].gameId, 'clue-grid');
+  assert.equal(insights[0].status, 'hard', '33% first-try should classify as Spiky / Practice');
+  assert.equal(insights[1].gameId, 'target-forge');
+  assert.equal(insights[1].status, 'easy', '100% first-try at 2.8s should classify as Too Easy?');
+  assert.equal(insights[2].gameId, 'balance-lab');
+  assert.equal(insights[2].status, 'flow', '75% first-try should classify as Flow Zone');
+
+  // Round-trip through Backup JSON preserves telemetry
+  const restored = importStateJson(exportStateJson(st));
+  assert.equal(restored.profiles[2].roundHistory.length, 11);
+
+  clearRoundTelemetry(st, kid.id);
+  assert.equal(getDifficultyInsights(kid, GAMES).length, 0);
+});
+
+// 12. Verify PWA manifest, icons, CI workflow, and every sw.js APP_SHELL asset exists on disk
+check('PWA manifest, PNG icons, CI workflow, and all Service Worker APP_SHELL paths exist on disk', () => {
+  const root = path.resolve(new URL('..', import.meta.url).pathname);
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.webmanifest'), 'utf8'));
+  assert.equal(manifest.display, 'standalone');
+  assert.ok(Array.isArray(manifest.icons) && manifest.icons.length >= 2);
+  for (const icon of manifest.icons) {
+    assert.ok(fs.existsSync(path.join(root, icon.src.replace(/^\.\//, ''))), `Missing manifest icon ${icon.src}`);
+  }
+  assert.ok(fs.existsSync(path.join(root, '.github/workflows/test.yml')), 'Missing GitHub Actions CI workflow');
+
+  const swSrc = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
+  const arrMatch = swSrc.match(/const APP_SHELL = \[([\s\S]*?)\];/);
+  assert.ok(arrMatch, 'sw.js must define APP_SHELL array');
+  const entries = [...arrMatch[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  assert.ok(entries.length >= 25, `Expected full app shell precache list, got ${entries.length}`);
+  for (const rel of entries) {
+    if (rel === './') continue;
+    const diskPath = path.join(root, rel.replace(/^\.\//, ''));
+    assert.ok(fs.existsSync(diskPath), `sw.js APP_SHELL path missing on disk: ${rel}`);
+  }
 });
 
 console.log(`ALL ${passed} GENERATOR & LOGIC VERIFICATION CHECKS PASSED!`);

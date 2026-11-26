@@ -376,6 +376,41 @@ export function generateSession(tier = 1, profile = null) {
   });
 }
 
+function getWordFamilyCousins(round) {
+  if (!round || round.tier < 3 || round.kind !== 'part') return [];
+  const fullLow = (round.fullWord || '').toLowerCase();
+  const seen = new Set([fullLow]);
+  const cousins = [];
+
+  // Extract parenthetical cousin examples from strategy tip (e.g., "(chronicle, synchronize)")
+  const parenMatches = (round.tip || '').match(/\(([^)]+)\)/g) || [];
+  for (const grp of parenMatches) {
+    const inner = grp.slice(1, -1);
+    if (/[=→+]/.test(inner)) continue;
+    for (const raw of inner.split(/[,;]/)) {
+      const clean = raw.trim().replace(/[^a-zA-Z-]/g, '');
+      if (clean.length >= 4 && !seen.has(clean.toLowerCase())) {
+        seen.add(clean.toLowerCase());
+        cousins.push(clean);
+      }
+    }
+  }
+
+  // For Tier 4 competing-word items, all 3 distractor prefixes also form real sibling words on the same root!
+  if (round.tier === 4 && Array.isArray(round.parts) && round.parts.length === 2 && round.parts[0] === '?') {
+    const stem = round.parts[1].replace(/^-/, '');
+    for (const opt of round.options || []) {
+      const built = opt.replace(/-$/, '') + stem;
+      if (built.length >= 4 && !seen.has(built.toLowerCase())) {
+        seen.add(built.toLowerCase());
+        cousins.push(built);
+      }
+    }
+  }
+
+  return cousins.slice(0, 4);
+}
+
 export function renderRound(container, round, callbacks) {
   let solved = false;
   let hadMistake = false;
@@ -414,6 +449,7 @@ export function renderRound(container, round, callbacks) {
       ${artHtml}
       <div class="morpheme-equation">${tilesHtml}</div>
       <p class="word-clue">${round.clue}</p>
+      <div id="wb-family-slot"></div>
     `;
   }
 
@@ -435,6 +471,16 @@ export function renderRound(container, round, callbacks) {
           blank.textContent = opt;
           blank.classList.remove('blank');
           blank.classList.add('filled-answer');
+        }
+        const cousins = getWordFamilyCousins(round);
+        const famSlot = stage.querySelector('#wb-family-slot');
+        if (famSlot && cousins.length >= 2) {
+          famSlot.innerHTML = `
+            <div class="word-family-bar animate-pop">
+              <span class="word-family-label">Word Cousins:</span>
+              ${cousins.map((w) => `<span class="word-family-chip">${w}</span>`).join('')}
+            </div>
+          `;
         }
         if (callbacks.profile) {
           recordWordAttempt(callbacks.profile, round.wordKey, !hadMistake);
