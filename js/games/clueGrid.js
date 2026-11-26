@@ -348,6 +348,10 @@ function renderLogicGrid(container, round, callbacks) {
 
   function render() {
     const readyPerm = getSelectedAssignment();
+    let matchedCount = 0;
+    for (let r = 0; r < n; r++) {
+      if (marks[r].includes(1)) matchedCount += 1;
+    }
     wrap.innerHTML = `
       <div class="clue-list-card">
         <div class="clue-list-title">Detective Clues (Tap grid boxes: 1st tap = ✕ ruled out · 2nd tap = ✓ match!)</div>
@@ -383,6 +387,10 @@ function renderLogicGrid(container, round, callbacks) {
               .join('')}
           </tbody>
         </table>
+      </div>
+
+      <div style="font-size:0.84rem;font-weight:600;color:var(--ink-secondary);">
+        ${readyPerm ? `All ${n} friends matched! Tap Check Case to verify.` : `${matchedCount} of ${n} friends matched with ✓`}
       </div>
 
       <div class="rotate-controls">

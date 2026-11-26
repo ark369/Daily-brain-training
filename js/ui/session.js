@@ -15,7 +15,7 @@ import {
   speakText,
   stopSpeaking,
 } from '../audio.js';
-import { getEffectiveTier, getGameStage, getTierInfo, getTodayKey, recordGameResult } from '../storage.js';
+import { getEffectiveTier, getGameStage, getTierInfo, getTodayKey, recordGameResult, saveState } from '../storage.js';
 import { escapeHtml } from '../games/utils.js';
 
 const OFFLINE_PAIRINGS = {
@@ -41,6 +41,7 @@ export function runGameSession(container, state, profile, gameMod, options, hand
   const tier = getEffectiveTier(profile, gameMod.meta.pillar);
   const tierInfo = getTierInfo(tier);
   const rounds = gameMod.generateSession(tier, profile);
+  saveState(state);
 
   let roundIdx = 0;
   let cleanCorrect = 0;
@@ -115,6 +116,7 @@ export function runGameSession(container, state, profile, gameMod, options, hand
       : `Awesome job finishing ${gameMod.meta.title}!`;
     speakText(speakSummary);
 
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     container.innerHTML = `
       <section class="card celebration-card animate-pop" aria-label="Game summary" style="position:relative;overflow:hidden;">
         ${renderConfettiHtml()}
@@ -225,6 +227,7 @@ export function runGameSession(container, state, profile, gameMod, options, hand
 
   function renderCurrentRound() {
     runCleanup();
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     const round = rounds[roundIdx];
     const isCustomFlow = rounds.length === 1 && round.kind === 'fact-studio-flow';
     let currentSpeakText = round.speakPrompt || round.prompt;
@@ -319,6 +322,8 @@ export function runGameSession(container, state, profile, gameMod, options, hand
     if (!isCustomFlow) {
       sessionKeyHandler = (e) => {
         if (e.target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+        const modalRoot = document.getElementById('modal-root');
+        if (modalRoot && modalRoot.childElementCount > 0) return;
         const nextBtn = feedbackSlot.querySelector('#btn-next-round');
         if (nextBtn && e.key === 'Enter') {
           e.preventDefault();
@@ -348,6 +353,7 @@ export function runGameSession(container, state, profile, gameMod, options, hand
       playCorrect,
       playRetry,
       playSwitch,
+      speakRule: (txt) => speakText(txt, false),
       registerCleanup: (fn) => {
         activeCleanup = fn;
       },
@@ -369,6 +375,7 @@ export function runGameSession(container, state, profile, gameMod, options, hand
         playCorrect();
         totalAttempts += 1;
         if (wasCleanFirstTry) cleanCorrect += 1;
+        saveState(state);
 
         const isLast = roundIdx >= rounds.length - 1;
         feedbackSlot.innerHTML = `

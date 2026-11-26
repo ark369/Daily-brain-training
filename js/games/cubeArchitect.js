@@ -280,7 +280,7 @@ const LAYER_PALETTES = [
   { top: '#78BF8E', left: '#4D9B67', right: '#33754A' }, // Layer 4 (Sage)
 ];
 
-function renderIsometricSvg(grid, exploded = false) {
+function renderIsometricSvg(grid, exploded = false, showOrientationBar = false) {
   const n = grid.length;
   const dx = n >= 4 ? 22 : 26;
   const dy = n >= 4 ? 12.5 : 15;
@@ -290,11 +290,24 @@ function renderIsometricSvg(grid, exploded = false) {
   let maxH = 0;
   for (const row of grid) for (const v of row) if (v > maxH) maxH = v;
 
-  // First pass: calculate exact visual bounds across all cubes (at their current exploded/stacked positions)
+  // First pass: calculate exact visual bounds across all cubes (and full floor footprint when showing orientation)
   let minX = Infinity;
   let maxX = -Infinity;
   let minY = Infinity;
   let maxY = -Infinity;
+
+  if (showOrientationBar) {
+    for (let r = 0; r < n; r++) {
+      for (let c = 0; c < n; c++) {
+        const cx = (c - r) * dx;
+        const cy = (c + r) * dy;
+        minX = Math.min(minX, cx - dx);
+        maxX = Math.max(maxX, cx + dx);
+        minY = Math.min(minY, cy - dy);
+        maxY = Math.max(maxY, cy + dy + dz);
+      }
+    }
+  }
 
   for (let z = 0; z < maxH; z++) {
     const liftY = exploded ? -z * explodeLift : 0;
@@ -311,15 +324,49 @@ function renderIsometricSvg(grid, exploded = false) {
     }
   }
 
-  // Fit smoothly inside 320x236 viewBox with generous padding
-  const padX = 28;
+  // Fit smoothly inside viewBox with generous padding
+  const padX = showOrientationBar ? 34 : 28;
   const padY = 22;
   const contentW = Math.max(60, maxX - minX);
   const contentH = Math.max(60, maxY - minY);
   const vbW = Math.max(300, contentW + padX * 2);
-  const vbH = Math.max(210, contentH + padY * 2 + 12);
+  const vbH = Math.max(210, contentH + padY * 2 + (showOrientationBar ? 34 : 12));
   const offsetX = (vbW - contentW) / 2 - minX;
-  const offsetY = (vbH - contentH - 8) / 2 - minY;
+  const offsetY = (vbH - contentH - (showOrientationBar ? 24 : 8)) / 2 - minY;
+
+  // Subtle floor grid + coral front edge bar for Top-View rounds so 3D-to-2D orientation is 100% unambiguous!
+  let floorMarkup = '';
+  if (showOrientationBar) {
+    const tiles = [];
+    for (let r = 0; r < n; r++) {
+      for (let c = 0; c < n; c++) {
+        const cx = offsetX + (c - r) * dx;
+        const cy = offsetY + (c + r) * dy + dz;
+        const pts = `${cx},${cy - dy} ${cx + dx},${cy} ${cx},${cy + dy} ${cx - dx},${cy}`;
+        tiles.push(`<polygon points="${pts}" fill="#EFEAE0" stroke="#D3CCC0" stroke-width="1.2"/>`);
+      }
+    }
+    // Bottom edge of Top View = row r = n - 1 (spans from (n-1, 0) left corner to (n-1, n-1) front corner)
+    const p1x = offsetX + (0 - (n - 1)) * dx - dx;
+    const p1y = offsetY + (0 + (n - 1)) * dy + dz;
+    const p2x = offsetX + (n - 1 - (n - 1)) * dx;
+    const p2y = offsetY + (n - 1 + (n - 1)) * dy + dy + dz;
+    const vx = p2x - p1x;
+    const vy = p2y - p1y;
+    const edgeLen = Math.hypot(vx, vy) || 1;
+    const nx = -vy / edgeLen;
+    const ny = vx / edgeLen;
+    const angleDeg = (Math.atan2(vy, vx) * 180) / Math.PI;
+    const mx = (p1x + p2x) / 2 + nx * 16;
+    const my = (p1y + p2y) / 2 + ny * 16 + 3;
+    floorMarkup = `
+      <g>
+        ${tiles.join('')}
+        <line x1="${p1x}" y1="${p1y + 3}" x2="${p2x}" y2="${p2y + 3}" stroke="#E46B49" stroke-width="4.5" stroke-linecap="round"/>
+        <text x="${mx.toFixed(1)}" y="${my.toFixed(1)}" text-anchor="middle" transform="rotate(${angleDeg.toFixed(1)}, ${mx.toFixed(1)}, ${my.toFixed(1)})" font-family="Lexend, sans-serif" font-size="10" font-weight="700" letter-spacing="0.06em" fill="#B54729">FRONT EDGE</text>
+      </g>
+    `;
+  }
 
   const layerMarkup = [];
   for (let z = 0; z < maxH; z++) {
@@ -356,7 +403,8 @@ function renderIsometricSvg(grid, exploded = false) {
 
   return `
     <svg viewBox="0 0 ${vbW.toFixed(1)} ${vbH.toFixed(1)}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="3D stack of blocks">
-      <ellipse cx="${shadowCx.toFixed(1)}" cy="${Math.min(vbH - 8, shadowCy).toFixed(1)}" rx="${(contentW * 0.44).toFixed(1)}" ry="${Math.max(10, n * dy * 0.36).toFixed(1)}" fill="hsla(32, 24%, 56%, 0.2)"/>
+      ${showOrientationBar ? '' : `<ellipse cx="${shadowCx.toFixed(1)}" cy="${Math.min(vbH - 8, shadowCy).toFixed(1)}" rx="${(contentW * 0.44).toFixed(1)}" ry="${Math.max(10, n * dy * 0.36).toFixed(1)}" fill="hsla(32, 24%, 56%, 0.2)"/>`}
+      ${floorMarkup}
       ${layerMarkup.join('')}
     </svg>
   `;
@@ -366,7 +414,8 @@ function renderTopViewSvg(footprint) {
   const n = footprint.length;
   const cell = 18;
   const pad = 6;
-  const size = n * cell + pad * 2;
+  const width = n * cell + pad * 2;
+  const height = n * cell + pad * 2 + 12;
   const rects = [];
   for (let r = 0; r < n; r++) {
     for (let c = 0; c < n; c++) {
@@ -376,20 +425,26 @@ function renderTopViewSvg(footprint) {
       );
     }
   }
-  return `<svg class="topview-option-svg" viewBox="0 0 ${size} ${size}" aria-hidden="true">${rects.join('')}</svg>`;
+  const barY = pad + n * cell + 3;
+  const frontBar = `
+    <line x1="${pad + 2}" y1="${barY}" x2="${pad + n * cell - 4}" y2="${barY}" stroke="#E46B49" stroke-width="3.2" stroke-linecap="round"/>
+    <text x="${width / 2}" y="${barY + 8}" text-anchor="middle" font-family="Lexend, sans-serif" font-size="6.8" font-weight="700" fill="#B54729">FRONT</text>
+  `;
+  return `<svg class="topview-option-svg" viewBox="0 0 ${width} ${height}" aria-hidden="true">${rects.join('')}${frontBar}</svg>`;
 }
 
 export function renderRound(container, round, callbacks) {
   let exploded = false;
   let solved = false;
   let hadMistake = false;
+  const isTopView = round.kind === 'topview';
 
   const wrap = document.createElement('div');
   wrap.className = 'cube-stage-wrap';
 
   const svgBox = document.createElement('div');
   svgBox.className = 'cube-svg-box';
-  svgBox.innerHTML = renderIsometricSvg(round.grid, exploded);
+  svgBox.innerHTML = renderIsometricSvg(round.grid, exploded, isTopView);
 
   const controls = document.createElement('div');
   controls.className = 'cube-controls';
@@ -404,7 +459,7 @@ export function renderRound(container, round, callbacks) {
   splitBtn.addEventListener('click', () => {
     exploded = !exploded;
     callbacks.playClick();
-    svgBox.innerHTML = renderIsometricSvg(round.grid, exploded);
+    svgBox.innerHTML = renderIsometricSvg(round.grid, exploded, isTopView);
     splitBtn.textContent = exploded ? '↕ Stack Back Together' : '↕ Split Layers to Peek';
   });
   controls.appendChild(splitBtn);
@@ -430,7 +485,8 @@ export function renderRound(container, round, callbacks) {
           btn.classList.add('is-correct');
           if (!exploded && round.maxH > 1) {
             exploded = true;
-            svgBox.innerHTML = renderIsometricSvg(round.grid, true);
+            svgBox.innerHTML = renderIsometricSvg(round.grid, true, isTopView);
+            splitBtn.textContent = '↕ Stack Back Together';
           }
           const layerText = round.layers.map((c, idx) => `Layer ${idx + 1} has ${c}`).join(', ');
           callbacks.onCorrect(
@@ -443,7 +499,7 @@ export function renderRound(container, round, callbacks) {
           btn.disabled = true;
           if (!exploded && round.maxH > 1) {
             exploded = true;
-            svgBox.innerHTML = renderIsometricSvg(round.grid, true);
+            svgBox.innerHTML = renderIsometricSvg(round.grid, true, isTopView);
             splitBtn.textContent = '↕ Stack Back Together';
           }
           callbacks.onRetry(

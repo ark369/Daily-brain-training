@@ -221,10 +221,12 @@
   transition: transform var(--dur-fast) var(--ease-spring), border-color var(--dur-fast), background-color var(--dur-fast);
 }
 
-.choice-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  border-color: var(--ink-primary);
-  background: var(--surface-subtle);
+@media (hover: hover) {
+  .choice-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    border-color: var(--ink-primary);
+    background: var(--surface-subtle);
+  }
 }
 
 .choice-btn:active:not(:disabled) {
@@ -473,9 +475,20 @@
 
 .nl-svg {
   width: 100%;
-  height: 126px;
+  height: 134px;
   overflow: visible;
   cursor: pointer;
+  touch-action: none;
+}
+
+.nl-svg:focus {
+  outline: none;
+}
+
+.nl-svg:focus-visible {
+  outline: 2.5px solid var(--visualize);
+  outline-offset: 4px;
+  border-radius: 10px;
 }
 
 .nl-readout {
@@ -536,6 +549,16 @@
   font-weight: 600;
   background: var(--compute-soft);
   color: var(--compute-dark);
+}
+
+.fact-strategy-pill {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  color: var(--visualize-dark);
+  background: var(--visualize-soft);
+  border: 1.5px solid var(--visualize-mid);
+  padding: 8px 18px;
+  border-radius: var(--radius-pill);
 }
 
 .calm-timer-wrap {
@@ -966,6 +989,13 @@
   min-width: 86px;
 }
 
+.morpheme-tile.filled-answer {
+  border-color: var(--success);
+  background: var(--success-soft);
+  color: var(--success-dark);
+  animation: popIn 280ms var(--ease-spring);
+}
+
 .morpheme-plus {
   font-family: var(--font-display);
   font-size: 1.4rem;
@@ -1113,9 +1143,10 @@
 }
 
 .shade-slot {
+  position: relative;
   min-width: 112px;
   min-height: 52px;
-  padding: 8px 14px;
+  padding: 8px 18px;
   border-radius: var(--radius-md);
   background: var(--surface-card);
   border: 2px dashed var(--wordcraft);
@@ -1126,12 +1157,36 @@
   font-family: var(--font-display);
   font-size: 1.08rem;
   font-weight: 600;
+  color: var(--ink-muted);
+  transition: transform var(--dur-fast) var(--ease-spring), border-color var(--dur-fast), background-color var(--dur-fast);
+}
+
+.shade-slot-x {
+  position: absolute;
+  top: 3px;
+  right: 7px;
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--wordcraft-dark);
+  opacity: 0.55;
+}
+
+.shade-slot.filled:hover:not(:disabled) .shade-slot-x {
+  opacity: 1;
 }
 
 .shade-slot.filled {
   border-style: solid;
   background: var(--wordcraft-soft);
   color: var(--wordcraft-dark);
+  cursor: pointer;
+}
+
+.shade-slot.filled:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: var(--wordcraft-dark);
 }
 
 .shade-slot small {
@@ -1267,7 +1322,7 @@
 
 .forge-equation-card {
   width: 100%;
-  max-width: 580px;
+  max-width: 680px;
   padding: 18px 16px;
   background: var(--surface-subtle);
   border-radius: var(--radius-lg);
@@ -1276,7 +1331,7 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .forge-slot {
@@ -1612,12 +1667,12 @@
   width: 100%;
   max-width: 640px;
   margin: 0 auto;
-  padding: var(--space-8);
+  padding: var(--space-6) var(--space-8);
   text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-5);
+  gap: var(--space-4);
 }
 
 .celebration-mascots {
@@ -1719,9 +1774,63 @@
 }
 
 @media (max-width: 560px) {
+  .session-wrap {
+    gap: var(--space-3);
+  }
+
+  .session-topbar {
+    gap: 8px;
+  }
+
+  .session-topbar #btn-exit-game {
+    order: 1;
+    min-height: 34px !important;
+    padding: 4px 12px !important;
+    font-size: 0.82rem !important;
+  }
+
+  .session-progress-dots {
+    order: 2;
+    margin-left: auto;
+    gap: 6px;
+  }
+
+  .progress-dot {
+    width: 12px;
+    height: 12px;
+  }
+
+  .session-info {
+    order: 3;
+    flex-basis: 100%;
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+
+  .session-game-title {
+    font-size: 1.02rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .game-stage {
-    padding: var(--space-4) var(--space-4) var(--space-6);
-    min-height: 390px;
+    padding: var(--space-4) var(--space-3) var(--space-5);
+    gap: var(--space-3);
+    min-height: 360px;
+  }
+
+  .prompt-text {
+    font-size: 1.16rem;
+  }
+
+  .speak-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .nl-track-card {
+    padding: 24px 14px 20px;
   }
 
   .choice-grid.cols-4 {

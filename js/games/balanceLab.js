@@ -21,10 +21,10 @@ export const meta = {
 };
 
 const WEIGHT_ITEMS = {
-  star: { label: 'Gold Star', short: 'Star', color: '#F4B41A', hi: '#FFE28A', stroke: '#1F2430' },
-  gem: { label: 'Teal Gem', short: 'Gem', color: '#1FA39B', hi: '#7BE3DC', stroke: '#1F2430' },
-  berry: { label: 'Coral Berry', short: 'Berry', color: '#EB5E3C', hi: '#FFA18A', stroke: '#1F2430' },
-  leaf: { label: 'Sage Acorn', short: 'Acorn', color: '#3FA45E', hi: '#8CE0A4', stroke: '#1F2430' },
+  star: { label: 'Gold Star', short: 'Star', plural: 'Stars', color: '#F4B41A', hi: '#FFE28A', stroke: '#1F2430' },
+  gem: { label: 'Teal Gem', short: 'Gem', plural: 'Gems', color: '#1FA39B', hi: '#7BE3DC', stroke: '#1F2430' },
+  berry: { label: 'Coral Berry', short: 'Berry', plural: 'Berries', color: '#EB5E3C', hi: '#FFA18A', stroke: '#1F2430' },
+  leaf: { label: 'Sage Acorn', short: 'Acorn', plural: 'Acorns', color: '#3FA45E', hi: '#8CE0A4', stroke: '#1F2430' },
 };
 
 function renderItemTokenSvg(item, cx, cy, forChoice = false, scale = 1) {
@@ -260,8 +260,8 @@ function makeEqualGroupRound(tier, preferredKind = null) {
     choices: makeNumericChoices(xVal, 4, 1, 4),
     answer: xVal,
     prompt: `The scale is balanced! How much does 1 ${info.short} weigh?`,
-    speakPrompt: `The scale is balanced! ${count} matching ${info.short}s balance ${total}. How much does 1 ${info.short} weigh?`,
-    strategyTip: `Share ${total} equally among the ${count} matching ${info.short}s: ${total} ÷ ${count} = ${xVal}!`,
+    speakPrompt: `The scale is balanced! ${count} matching ${info.plural} balance ${total}. How much does 1 ${info.short} weigh?`,
+    strategyTip: `Share ${total} equally among the ${count} matching ${info.plural}: ${total} ÷ ${count} = ${xVal}!`,
   };
 }
 
@@ -299,8 +299,8 @@ function makeVisualAlgebraRound(tier = 3, preferredKind = null) {
     choices: makeNumericChoices(xVal, 4, 1, 4),
     answer: xVal,
     prompt: `The scale is balanced! How much does 1 ${info.short} weigh?`,
-    speakPrompt: `The scale is balanced! ${count} ${info.short}s plus ${extra} balance ${rightTotal}. How much does 1 ${info.short} weigh?`,
-    strategyTip: `Take ${extra} off BOTH sides so it stays balanced! That leaves ${count} ${info.short}s = ${rightTotal - extra}, so 1 ${info.short} = ${xVal}.`,
+    speakPrompt: `The scale is balanced! ${count} ${info.plural} plus ${extra} balance ${rightTotal}. How much does 1 ${info.short} weigh?`,
+    strategyTip: `Take ${extra} off BOTH sides so it stays balanced! That leaves ${count} ${info.plural} = ${rightTotal - extra}, so 1 ${info.short} = ${xVal}.`,
   };
 }
 
@@ -347,7 +347,7 @@ function makeCancelBothSidesRound(tier = 3, preferredKind = null) {
   const finalStep =
     extraShapes === 1
       ? `That leaves 1 ${info.short} = ${xVal}!`
-      : `That leaves ${extraShapes} ${info.short}s = ${extraShapes * xVal}, so 1 ${info.short} = ${xVal}!`;
+      : `That leaves ${extraShapes} ${info.plural} = ${extraShapes * xVal}, so 1 ${info.short} = ${xVal}!`;
 
   return {
     kind: 'numeric',
@@ -357,7 +357,7 @@ function makeCancelBothSidesRound(tier = 3, preferredKind = null) {
     choices: makeNumericChoices(xVal, 4, 1, 4),
     answer: xVal,
     prompt: `The scale is balanced! How much does 1 ${info.short} weigh?`,
-    speakPrompt: `Both pans have ${info.short}s! Try removing one ${info.short} from each pan to see what is left. How much does 1 ${info.short} weigh?`,
+    speakPrompt: `Both pans have ${info.plural}! Try removing one ${info.short} from each pan to see what is left. How much does 1 ${info.short} weigh?`,
     strategyTip: `Remove 1 ${info.short} from BOTH pans${numStep}! ${finalStep}`,
   };
 }
@@ -406,7 +406,7 @@ function makeTwoScaleSystemRound(tier = 4) {
     answer: valB,
     prompt: `Both scales are balanced! How much does 1 ${infoB.short} weigh?`,
     speakPrompt: `Both scales are balanced. Use the top scale to find the ${infoA.short} first, then solve for 1 ${infoB.short}.`,
-    strategyTip: `From Scale 1: ${countA} ${infoA.short}s = ${countA * valA}, so 1 ${infoA.short} = ${valA}. Plug ${valA} into Scale 2: ${bStep}`,
+    strategyTip: `From Scale 1: ${countA} ${infoA.plural} = ${countA * valA}, so 1 ${infoA.short} = ${valA}. Plug ${valA} into Scale 2: ${bStep}`,
   };
 }
 
@@ -477,6 +477,8 @@ export function generateSession(tier = 1, profile = null) {
 export function renderRound(container, round, callbacks) {
   let solved = false;
   let hadMistake = false;
+  let simpBtnRef = null;
+  let resetBtnRef = null;
 
   const wrap = document.createElement('div');
   wrap.className = 'scales-stack';
@@ -501,6 +503,7 @@ export function renderRound(container, round, callbacks) {
     simpBtn.style.minHeight = '42px';
     simpBtn.style.fontSize = '0.9rem';
     simpBtn.textContent = round.cancelSteps[0].label;
+    simpBtnRef = simpBtn;
 
     const resetBtn = document.createElement('button');
     resetBtn.type = 'button';
@@ -509,6 +512,7 @@ export function renderRound(container, round, callbacks) {
     resetBtn.style.fontSize = '0.84rem';
     resetBtn.textContent = 'Reset Scale';
     resetBtn.hidden = true;
+    resetBtnRef = resetBtn;
 
     simpBtn.addEventListener('click', () => {
       if (solved || stepIdx >= round.cancelSteps.length) return;
@@ -580,6 +584,8 @@ export function renderRound(container, round, callbacks) {
         if (val === round.answer) {
           solved = true;
           btn.classList.add('is-correct');
+          if (simpBtnRef) simpBtnRef.disabled = true;
+          if (resetBtnRef) resetBtnRef.disabled = true;
           if (round.solvedScale && scaleCards[0]) {
             scaleCards[0].innerHTML = renderScaleSvg(round.solvedScale);
           }

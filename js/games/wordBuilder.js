@@ -434,6 +434,7 @@ export function renderRound(container, round, callbacks) {
         if (blank) {
           blank.textContent = opt;
           blank.classList.remove('blank');
+          blank.classList.add('filled-answer');
         }
         if (callbacks.profile) {
           recordWordAttempt(callbacks.profile, round.wordKey, !hadMistake);

@@ -10,12 +10,15 @@ import { GAMES, PILLARS } from '../js/games/index.js';
 import { getDailyMix, getMonthCalendarData } from '../js/daily.js';
 import {
   loadState,
+  addProfile,
   recordFactAttempt,
   getTrickyFacts,
   recordGameResult,
   recordWordAttempt,
   getGameStage,
   getTierUpRecommendations,
+  exportStateJson,
+  importStateJson,
 } from '../js/storage.js';
 import { CHIRAL_SHAPES, cellsSignature, rotateCells90CW, flipCellsHorizontal } from '../js/games/shapeShifter.js';
 import { foldNet3D, VALID_CUBE_NETS, INVALID_CUBE_NETS } from '../js/games/shapeComposer.js';
@@ -218,11 +221,15 @@ for (const game of GAMES) {
             assert.equal(r.cards.length, 5, 'Target Forge should offer 5 cards');
             assert.ok(Number.isFinite(r.target));
             assert.ok(targetForgeHasSolution(r), `Target Forge round must be solvable (${r.sampleSolution})`);
+            if (tier === 2) {
+              assert.equal(r.defaultOp, '+', 'Tier 2 Target Forge must default to + (no operator giveaway)');
+            }
           }
 
           if (game.meta.id === 'balance-lab') {
             assert.ok(r.scales.length >= 1);
             assert.ok(typeof r.signature === 'string' && r.signature.length > 0, 'Balance Lab round needs signature');
+            assert.ok(!r.strategyTip.includes('Berrys') && !r.speakPrompt.includes('Berrys'), 'Must pluralize Berries properly');
             for (const sc of r.scales) {
               assert.ok(sc.left.length >= 1 && sc.left.length <= 4, `Left pan overflow: ${sc.left.length}`);
               assert.ok(sc.right.length >= 1 && sc.right.length <= 4, `Right pan overflow: ${sc.right.length}`);
@@ -241,6 +248,9 @@ for (const game of GAMES) {
             if (r.kind === 'sort-switch' || r.kind === 'sort-bool') {
               assert.equal(r.cards.length, 4);
               assert.ok(r.cards.some((c) => c.switched), 'Must switch rule mid-round');
+              for (const c of r.cards) {
+                assert.ok(c.color && c.shape && c.count >= 1, 'Every sort card must have color, shape & count');
+              }
             } else if (r.kind === 'pattern-number' || r.kind === 'function-machine') {
               assert.ok(r.choices.includes(r.answer));
               assert.equal(new Set(r.choices).size, 4);
@@ -262,6 +272,9 @@ for (const game of GAMES) {
               1,
               `Clue Grid must have EXACTLY 1 unique solution (got ${countValidAssignments(r.clues, r.size)})`
             );
+            for (const txt of r.clueTexts) {
+              assert.ok(!txt.includes('the Soccer') && !txt.includes('the Tennis') && !txt.includes('the Mars') && !txt.includes('the Teal'), `Awkward article in clue: ${txt}`);
+            }
             if (tier === 4) {
               assert.ok(
                 r.clues.every((cl) => cl.type !== 'is'),
@@ -297,6 +310,8 @@ for (const game of GAMES) {
             } else {
               assert.equal(r.ordered.length, 3);
               assert.equal(r.shuffledWords.length, 3);
+              assert.ok(!r.shuffledWords.every((w, i) => w === r.ordered[i]), 'Ladder shuffledWords must never start already solved');
+              assert.ok(r.speakPrompt.includes(r.shuffledWords.join(', ')), 'Ladder speakPrompt must read shuffledWords, never ordered answer');
               assert.ok(typeof r.directionLabel === 'string' && r.directionLabel.length > 0);
             }
           }
@@ -494,6 +509,108 @@ check('All CHIRAL_SHAPES are orthogonally connected and strictly chiral', () => 
     }
     assert.ok(!rotSigs.has(flippedSig), `${shape.name} must be strictly chiral!`);
   }
+});
+
+// 9. Exhaustively drain and audit ALL 490 curated Word Builder, Word Connections & Story Detective items
+check('All 490 curated WordCraft and Story Detective items pass structural, spacing, and anti-spoiler checks', () => {
+  const wbMod = GAMES.find((g) => g.meta.id === 'word-builder');
+  const wcMod = GAMES.find((g) => g.meta.id === 'word-connections');
+  const sdMod = GAMES.find((g) => g.meta.id === 'story-detective');
+
+  const drainAll = (mod, tier) => {
+    const profile = { id: 'audit', wordHistory: {}, recentPuzzles: {} };
+    const byKey = new Map();
+    for (let pass = 0; pass < 30; pass++) {
+      const rounds = mod.generateSession(tier, profile);
+      let added = 0;
+      for (const r of rounds) {
+        if (!byKey.has(r.wordKey)) {
+          byKey.set(r.wordKey, r);
+          added += 1;
+        }
+        recordWordAttempt(profile, r.wordKey, true, '2026-11-25');
+      }
+      if (added === 0) break;
+    }
+    return Array.from(byKey.values());
+  };
+
+  let wbTotal = 0;
+  let wcTotal = 0;
+  let sdTotal = 0;
+  const seenSdIds = new Set();
+
+  for (let tier = 1; tier <= 4; tier++) {
+    for (const r of drainAll(wbMod, tier)) {
+      wbTotal += 1;
+      assert.equal(new Set(r.shuffledOptions).size, 4, `WB ${r.wordKey} must have 4 unique options`);
+      assert.ok(r.shuffledOptions.includes(r.answer), `WB ${r.wordKey} answer missing`);
+      assert.ok(r.strategyTip && r.strategyTip.length >= 8, `WB ${r.wordKey} tip too short`);
+      if (r.kind === 'morpheme') assert.ok(r.parts.includes('?'), `WB ${r.wordKey} missing ? tile`);
+    }
+
+    for (const r of drainAll(wcMod, tier)) {
+      wcTotal += 1;
+      assert.ok(r.strategyTip && r.strategyTip.length >= 8, `WC ${r.wordKey} tip too short`);
+      assert.ok(!r.prompt.includes('::'), `WC ${r.wordKey} contains :: notation`);
+      if (r.kind === 'choice') {
+        assert.equal(new Set(r.shuffledOptions).size, 4, `WC ${r.wordKey} must have 4 unique options`);
+        assert.ok(r.shuffledOptions.includes(r.answer), `WC ${r.wordKey} answer missing`);
+        if (r.subkind === 'sentence') {
+          if (r.sentenceBefore) assert.match(r.sentenceBefore, /[\s“"‘'(]$/, `WC ${r.wordKey} sentenceBefore spacing`);
+          if (r.sentenceAfter) assert.match(r.sentenceAfter, /^[\s.,!?;:’'"”)]/, `WC ${r.wordKey} sentenceAfter spacing`);
+        }
+      } else {
+        assert.equal(new Set(r.ordered).size, 3);
+        assert.ok(!r.shuffledWords.every((w, i) => w === r.ordered[i]), `WC ${r.wordKey} ladder pre-solved`);
+        assert.ok(r.speakPrompt.includes(r.shuffledWords.join(', ')), `WC ${r.wordKey} ladder read-aloud spoiler`);
+      }
+    }
+
+    for (const r of drainAll(sdMod, tier)) {
+      sdTotal += 1;
+      assert.ok(r.id && !seenSdIds.has(r.id), `SD duplicate/missing id ${r.id}`);
+      seenSdIds.add(r.id);
+      assert.equal(new Set(r.shuffledOptions).size, 4, `SD ${r.id} must have 4 unique options`);
+      assert.ok(r.shuffledOptions.includes(r.answer), `SD ${r.id} answer missing`);
+      if (r.before) assert.match(r.before, /[\s“"‘'(]$/, `SD ${r.id} before spacing`);
+      if (r.after) assert.match(r.after, /^[\s.,!?;:’'"”)]/, `SD ${r.id} after spacing`);
+    }
+  }
+
+  assert.equal(wbTotal, 182, 'Word Builder bank must have all 182 items');
+  assert.equal(wcTotal, 180, 'Word Connections bank must have all 180 items');
+  assert.equal(sdTotal, 128, 'Story Detective bank must have all 128 stories');
+});
+
+// 10. Verify Backup JSON export/import, legacy v1 migration, malformed rejection & unique profile IDs
+check('Backup JSON export/import migrates legacy v1 profiles cleanly, rejects corrupted files, and avoids ID collisions', () => {
+  const st = loadState();
+  const pA = addProfile(st, { name: 'Twin A', avatar: 'owl', tier: 2 });
+  const pB = addProfile(st, { name: 'Twin B', avatar: 'otter', tier: 2 });
+  assert.notEqual(pA.id, pB.id, 'Rapidly added profiles must have unique IDs');
+
+  const exported = exportStateJson(st);
+  const reimported = importStateJson(exported);
+  assert.equal(reimported.profiles.length, st.profiles.length);
+
+  // Legacy v1 backup missing wordHistory, recentPuzzles, gameMastery, and with invalid activeProfileId & out-of-range tier
+  const legacyJson = JSON.stringify({
+    version: 1,
+    activeProfileId: 'deleted-id',
+    profiles: [{ id: 'legacy-1', name: 'Leo', tier: 99 }],
+  });
+  const migrated = importStateJson(legacyJson);
+  assert.equal(migrated.activeProfileId, 'legacy-1');
+  assert.equal(migrated.profiles[0].tier, 4, 'Out-of-range tier must clamp cleanly to 4');
+  assert.deepEqual(migrated.profiles[0].wordHistory, {});
+  assert.deepEqual(migrated.profiles[0].recentPuzzles, {});
+  assert.deepEqual(migrated.profiles[0].gameMastery, {});
+
+  // Malformed or empty profiles must throw cleanly
+  assert.throws(() => importStateJson('{"profiles": []}'));
+  assert.throws(() => importStateJson('{"profiles": [null, "bad"]}'));
+  assert.throws(() => importStateJson('not valid json'));
 });
 
 console.log(`ALL ${passed} GENERATOR & LOGIC VERIFICATION CHECKS PASSED!`);

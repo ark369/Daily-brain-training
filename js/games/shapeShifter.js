@@ -374,12 +374,26 @@ function renderDiagonalMirrorRound(container, round, callbacks) {
   checkBtn.textContent = 'Check Diagonal Mirror!';
   checkBtn.addEventListener('click', () => {
     if (solved) return;
+    let painted = 0;
+    for (let r = 1; r < size; r++) for (let c = 0; c < r; c++) painted += userGrid[r][c];
+    if (painted === 0) {
+      callbacks.onRetry('Tap squares below the diagonal line to paint the reflection first!');
+      return;
+    }
     let mismatches = 0;
+    let hintedMissed = 0;
     for (let r = 1; r < size; r++) {
       for (let c = 0; c < r; c++) {
         const ok = userGrid[r][c] === round.expectedRight[r][c];
-        buttons[r][c].classList.toggle('hint-pulse', !ok);
-        if (!ok) mismatches += 1;
+        if (!ok) {
+          mismatches += 1;
+          const isExtra = userGrid[r][c] === 1;
+          const shouldPulse = isExtra || hintedMissed < 2;
+          if (!isExtra && shouldPulse) hintedMissed += 1;
+          buttons[r][c].classList.toggle('hint-pulse', shouldPulse);
+        } else {
+          buttons[r][c].classList.remove('hint-pulse');
+        }
       }
     }
     if (mismatches === 0) {
@@ -389,7 +403,7 @@ function renderDiagonalMirrorRound(container, round, callbacks) {
     } else {
       hadMistake = true;
       callbacks.onRetry(
-        `Almost! ${mismatches} square${mismatches === 1 ? '' : 's'} highlighted in coral need${mismatches === 1 ? 's' : ''} a flip.`
+        `Almost! ${mismatches} square${mismatches === 1 ? '' : 's'} still need${mismatches === 1 ? 's' : ''} a flip — check the coral hint${mismatches === 1 ? '' : 's'}!`
       );
     }
   });
@@ -463,12 +477,26 @@ function renderMirrorRound(container, round, callbacks) {
   checkBtn.textContent = 'Check My Mirror!';
   checkBtn.addEventListener('click', () => {
     if (solved) return;
+    let painted = 0;
+    for (let r = 0; r < round.rows; r++) for (let c = 0; c < round.cols; c++) painted += userGrid[r][c];
+    if (painted === 0) {
+      callbacks.onRetry('Tap squares on your side to paint the reflection first!');
+      return;
+    }
     let mismatches = 0;
+    let hintedMissed = 0;
     for (let r = 0; r < round.rows; r++) {
       for (let c = 0; c < round.cols; c++) {
         const right = userGrid[r][c] === round.expectedRight[r][c];
-        rightButtons[r][c].classList.toggle('hint-pulse', !right);
-        if (!right) mismatches += 1;
+        if (!right) {
+          mismatches += 1;
+          const isExtra = userGrid[r][c] === 1;
+          const shouldPulse = isExtra || hintedMissed < 2;
+          if (!isExtra && shouldPulse) hintedMissed += 1;
+          rightButtons[r][c].classList.toggle('hint-pulse', shouldPulse);
+        } else {
+          rightButtons[r][c].classList.remove('hint-pulse');
+        }
       }
     }
     if (mismatches === 0) {
@@ -478,7 +506,7 @@ function renderMirrorRound(container, round, callbacks) {
     } else {
       hadMistake = true;
       callbacks.onRetry(
-        `Almost! ${mismatches} square${mismatches === 1 ? '' : 's'} highlighted in coral need${mismatches === 1 ? 's' : ''} a flip.`
+        `Almost! ${mismatches} square${mismatches === 1 ? '' : 's'} still need${mismatches === 1 ? 's' : ''} a flip — check the coral hint${mismatches === 1 ? '' : 's'}!`
       );
     }
   });
@@ -495,6 +523,16 @@ function renderMirrorRound(container, round, callbacks) {
 function renderPredictRotateRound(container, round, callbacks) {
   let solved = false;
   let hadMistake = false;
+  let resetTimer = null;
+
+  if (callbacks.registerCleanup) {
+    callbacks.registerCleanup(() => {
+      if (resetTimer) {
+        clearTimeout(resetTimer);
+        resetTimer = null;
+      }
+    });
+  }
 
   const wrap = document.createElement('div');
   wrap.style.display = 'flex';
@@ -544,6 +582,10 @@ function renderPredictRotateRound(container, round, callbacks) {
     btn.textContent = opt.label;
     btn.addEventListener('click', () => {
       if (solved) return;
+      if (resetTimer) {
+        clearTimeout(resetTimer);
+        resetTimer = null;
+      }
       const expectedKey = round.isFlippedImpostor ? 'flip' : String(round.turnsNeededCW);
 
       // Smoothly animate the chosen rotation so the child sees immediate spatial feedback!
@@ -565,7 +607,8 @@ function renderPredictRotateRound(container, round, callbacks) {
         btn.classList.add('is-wrong');
         btn.disabled = true;
         // Snap back after showing why that turn didn't match
-        setTimeout(() => {
+        resetTimer = setTimeout(() => {
+          resetTimer = null;
           if (!solved) rotator.style.transform = 'rotate(0deg)';
         }, 700);
         const hint = round.isFlippedImpostor

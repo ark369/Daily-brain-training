@@ -395,6 +395,7 @@ export function renderRound(container, round, callbacks) {
   let typedVal = '';
   let itemStartTs = performance.now();
   let sprintTimerId = null;
+  let stepTimeoutId = null;
   let secondsLeft = 60;
   let finished = false;
   let keydownHandler = null;
@@ -408,9 +409,14 @@ export function renderRound(container, round, callbacks) {
   container.appendChild(root);
 
   function cleanup() {
+    finished = true;
     if (sprintTimerId) {
       clearInterval(sprintTimerId);
       sprintTimerId = null;
+    }
+    if (stepTimeoutId) {
+      clearTimeout(stepTimeoutId);
+      stepTimeoutId = null;
     }
     if (keydownHandler) {
       window.removeEventListener('keydown', keydownHandler);
@@ -419,9 +425,14 @@ export function renderRound(container, round, callbacks) {
   }
   if (callbacks.registerCleanup) callbacks.registerCleanup(cleanup);
 
+  function isModalOrInputFocused(e) {
+    if (e.target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return true;
+    const modalRoot = document.getElementById('modal-root');
+    return Boolean(modalRoot && modalRoot.childElementCount > 0);
+  }
+
   function finishWholeGame() {
     if (finished) return;
-    finished = true;
     cleanup();
     const totalCorrect = warmupClean + fluencyCorrect;
     const totalAttempts = round.warmups.length + Math.max(1, fluencyAttempts);
@@ -435,16 +446,29 @@ export function renderRound(container, round, callbacks) {
     });
   }
 
+  function bindGlobalKeyHandler(fn) {
+    if (keydownHandler) {
+      window.removeEventListener('keydown', keydownHandler);
+    }
+    keydownHandler = (e) => {
+      if (finished || isModalOrInputFocused(e)) return;
+      fn(e);
+    };
+    window.addEventListener('keydown', keydownHandler);
+  }
+
   function renderWarmup() {
+    if (finished) return;
     const item = round.warmups[warmupIdx];
     typedVal = '';
     itemStartTs = performance.now();
     let hadMistake = false;
+    let answered = false;
 
     callbacks.setPrompt(
       `Strategy Warm-Up (${warmupIdx + 1} of ${round.warmups.length}) — Untimed`,
       item.strategyTip,
-      `Strategy warm up: what is ${item.equation.replace('×', 'times').replace('−', 'minus').replace('?', '')}?`
+      `Strategy warm up: what is ${item.equation.replace('×', 'times').replace('−', 'minus').replace('÷', 'divided by').replace('?', '')}?`
     );
 
     let scaffoldHtml = '';
@@ -452,6 +476,8 @@ export function renderRound(container, round, callbacks) {
       scaffoldHtml = renderTenFrameHtml(item.visual.a, item.visual.b);
     } else if (item.visual.type === 'splitarray') {
       scaffoldHtml = renderSplitArrayHtml(item.visual.rows, item.visual.colsA, item.visual.colsB);
+    } else if (item.visual.type === 'text' && item.visual.label) {
+      scaffoldHtml = `<div class="fact-strategy-pill">Mental Shortcut: <strong>${item.visual.label}</strong></div>`;
     }
 
     const choices = shuffle(
@@ -485,13 +511,16 @@ export function renderRound(container, round, callbacks) {
       btn.className = 'choice-btn';
       btn.textContent = String(val);
       btn.addEventListener('click', () => {
+        if (answered || finished) return;
         if (val === item.answer) {
+          answered = true;
           callbacks.playCorrect();
           btn.classList.add('is-correct');
           if (!hadMistake) warmupClean += 1;
           msgBox.innerHTML = `<div class="feedback-banner correct">${item.strategyTip}</div>`;
           Array.from(choiceBox.querySelectorAll('button')).forEach((b) => (b.disabled = true));
-          setTimeout(() => {
+          stepTimeoutId = setTimeout(() => {
+            if (finished) return;
             warmupIdx += 1;
             if (warmupIdx < round.warmups.length) {
               renderWarmup();
@@ -509,9 +538,22 @@ export function renderRound(container, round, callbacks) {
       });
       choiceBox.appendChild(btn);
     });
+
+    bindGlobalKeyHandler((e) => {
+      if (stagePhase !== 'warmup' || answered) return;
+      if (/^[1-4]$/.test(e.key)) {
+        const btns = Array.from(choiceBox.querySelectorAll('.choice-btn'));
+        const target = btns[Number(e.key) - 1];
+        if (target && !target.disabled) {
+          e.preventDefault();
+          target.click();
+        }
+      }
+    });
   }
 
   function renderTransition() {
+    if (finished) return;
     stagePhase = 'transition';
     callbacks.setPrompt(
       round.useTimedSprint ? 'Ready for a Calm 60-Second Fluency Sprint?' : 'Ready for Fluency Practice?',
@@ -544,13 +586,22 @@ export function renderRound(container, round, callbacks) {
       </div>
     `;
 
-    root.querySelector('#btn-start-fluency').addEventListener('click', () => {
+    const startBtn = root.querySelector('#btn-start-fluency');
+    startBtn.addEventListener('click', () => {
       callbacks.playClick();
       startFluency();
+    });
+
+    bindGlobalKeyHandler((e) => {
+      if (stagePhase === 'transition' && e.key === 'Enter') {
+        e.preventDefault();
+        startBtn.click();
+      }
     });
   }
 
   function startFluency() {
+    if (finished) return;
     stagePhase = 'fluency';
     fluencyIdx = 0;
     fluencyCorrect = 0;
@@ -638,7 +689,7 @@ export function renderRound(container, round, callbacks) {
         if (scoreLbl) scoreLbl.textContent = `Accurate: ${fluencyCorrect}`;
         fluencyIdx += 1;
         if (!round.useTimedSprint && fluencyIdx >= untimedTarget) {
-          setTimeout(finishWholeGame, 500);
+          stepTimeoutId = setTimeout(finishWholeGame, 450);
           return;
         }
         showCurrentFact();
@@ -676,8 +727,8 @@ export function renderRound(container, round, callbacks) {
       btn.addEventListener('click', () => handleKey(btn.dataset.key));
     });
 
-    keydownHandler = (e) => {
-      if (stagePhase !== 'fluency' || finished) return;
+    bindGlobalKeyHandler((e) => {
+      if (stagePhase !== 'fluency') return;
       if (/^\d$/.test(e.key)) {
         e.preventDefault();
         handleKey(e.key);
@@ -688,11 +739,12 @@ export function renderRound(container, round, callbacks) {
         e.preventDefault();
         handleKey('Go');
       }
-    };
-    window.addEventListener('keydown', keydownHandler);
+    });
 
     if (round.useTimedSprint) {
       sprintTimerId = setInterval(() => {
+        const modalRoot = document.getElementById('modal-root');
+        if (modalRoot && modalRoot.childElementCount > 0) return; // Pause calmly if Parent Corner is open!
         secondsLeft -= 1;
         if (timeLbl) timeLbl.textContent = `${Math.max(0, secondsLeft)}s left`;
         if (barEl) barEl.style.width = `${Math.max(0, (secondsLeft / 60) * 100)}%`;

@@ -64,7 +64,7 @@ function makeAddSubRound() {
     return {
       kind: 'two-card',
       ops: ['+', '−'],
-      defaultOp: '−',
+      defaultOp: '+',
       target,
       cards,
       sampleSolution: `${a} − ${b} = ${target}`,

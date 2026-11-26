@@ -134,6 +134,7 @@ select:focus-visible {
   min-height: 46px;
   padding: 10px 20px;
   border-radius: var(--radius-md);
+  text-decoration: none;
   font-family: var(--font-display);
   font-size: 1.02rem;
   font-weight: 600;
@@ -1196,6 +1197,45 @@ select:focus-visible {
   }
 }
 
+@media (max-width: 720px) {
+  .topbar {
+    gap: 8px;
+    padding: 0 0 var(--space-3);
+  }
+
+  .brand {
+    padding: 2px 4px 2px 0;
+    gap: 8px;
+  }
+
+  .brand-mark {
+    width: 34px;
+    height: 34px;
+  }
+
+  .brand-title {
+    font-size: 1.05rem;
+    white-space: nowrap;
+  }
+
+  .brand-sub {
+    display: none;
+  }
+
+  .topbar-controls {
+    gap: 6px;
+    flex-wrap: nowrap;
+  }
+
+  .btn-icon {
+    height: 36px;
+    padding: 0 10px;
+    font-size: 0.78rem;
+    gap: 5px;
+    white-space: nowrap;
+  }
+}
+
 @media (max-width: 560px) {
   .app-shell {
     padding: var(--space-3) var(--space-3) var(--space-10);
@@ -1224,10 +1264,42 @@ select:focus-visible {
 
   .topbar {
     flex-wrap: wrap;
+    gap: 8px;
+    padding: 0 0 var(--space-3);
+  }
+
+  .brand {
+    padding: 2px 4px 2px 0;
+    gap: 8px;
+  }
+
+  .brand-mark {
+    width: 32px;
+    height: 32px;
+  }
+
+  .brand-title {
+    font-size: 1.04rem;
   }
 
   .brand-sub {
     display: none;
+  }
+
+  .topbar-controls {
+    width: 100%;
+    gap: 6px;
+    flex-wrap: nowrap;
+  }
+
+  .btn-icon {
+    flex: auto;
+    min-width: 0;
+    height: 36px;
+    padding: 0 8px;
+    font-size: 0.75rem;
+    gap: 4px;
+    white-space: nowrap;
   }
 
   .games-grid {

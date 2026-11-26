@@ -393,10 +393,19 @@ export function renderRound(container, round, callbacks) {
     if (round.step >= 1) {
       return Math.round(raw / round.step) * round.step;
     }
+    // Gentle magnetic snap to active self-partition ticks when kid cuts the bar into N equal parts!
+    if (activePartitions > 0) {
+      const unitStep = 1 / activePartitions;
+      const nearest = Math.round(raw / unitStep) * unitStep;
+      const snapRadius = (round.max - round.min) * 0.032;
+      if (Math.abs(raw - nearest) <= snapRadius && nearest >= round.min && nearest <= round.max) {
+        return Number(nearest.toFixed(4));
+      }
+    }
     return Math.round(raw * 100) / 100;
   }
 
-  function renderSvg(revealTarget = false) {
+  function buildTicksAndRevealMarkup(revealTarget = false) {
     const ticks = [];
     if (round.showAllTicks) {
       for (let v = round.min; v <= round.max; v += 1) {
@@ -423,7 +432,6 @@ export function renderRound(container, round, callbacks) {
         );
       }
 
-      // Active self-partitioning cuts OR reveal guide ticks
       const splitsToDraw =
         activePartitions > 0
           ? activePartitions * (round.max === 2 ? 2 : 1)
@@ -446,9 +454,15 @@ export function renderRound(container, round, callbacks) {
     let startMarker = '';
     if (round.hopDelta !== 0) {
       const sx = valToX(round.startPos);
+      const labelText = `START (${round.startPos})`;
+      const pillW = Math.max(66, labelText.length * 6.8 + 14);
+      const pillX = Math.max(6, Math.min(600 - pillW - 6, sx - pillW / 2));
+      const pillY = lineY + 38;
       startMarker = `
+        <line x1="${sx}" y1="${lineY + 7}" x2="${sx}" y2="${pillY}" stroke="#D19A24" stroke-width="1.6" stroke-dasharray="2.5 2.5"/>
         <circle cx="${sx}" cy="${lineY}" r="7" fill="#E9A825" stroke="#232733" stroke-width="2"/>
-        <text x="${sx}" y="${lineY - 14}" text-anchor="middle" font-family="Lexend, sans-serif" font-size="11" font-weight="700" fill="#8C6208">START (${round.startPos})</text>
+        <rect x="${pillX.toFixed(1)}" y="${pillY}" width="${pillW.toFixed(1)}" height="20" rx="10" fill="#FEF4D8" stroke="#E0A432" stroke-width="1.4"/>
+        <text x="${(pillX + pillW / 2).toFixed(1)}" y="${pillY + 13.5}" text-anchor="middle" font-family="Lexend, sans-serif" font-size="10.5" font-weight="700" fill="#8C6208">${labelText}</text>
       `;
     }
 
@@ -478,9 +492,17 @@ export function renderRound(container, round, callbacks) {
       `;
     }
 
-    const fx = valToX(currentVal);
-    const frog = `
-      <g transform="translate(${fx}, ${lineY - 22})" style="cursor: grab;">
+    return `${ticks.join('')}${startMarker}${hopArcs}${targetFlag}`;
+  }
+
+  // Mount persistent SVG once so pointer capture & keyboard focus stay unbroken during smooth dragging!
+  trackCard.innerHTML = `
+    <svg class="nl-svg" viewBox="0 0 600 132" role="slider" tabindex="0"
+         aria-label="Number line from ${round.min} to ${round.max}"
+         aria-valuemin="${round.min}" aria-valuemax="${round.max}" aria-valuenow="${currentVal}">
+      <line x1="${trackLeft}" y1="${lineY}" x2="${trackRight}" y2="${lineY}" stroke="#232733" stroke-width="4" stroke-linecap="round"/>
+      <g id="nl-decor-layer"></g>
+      <g id="nl-frog" transform="translate(${valToX(currentVal)}, ${lineY - 22})" style="cursor: grab;">
         <circle cx="0" cy="22" r="7" fill="#E46B49" stroke="#232733" stroke-width="2.2"/>
         <ellipse cx="0" cy="0" rx="18" ry="14" fill="#46A06B" stroke="#232733" stroke-width="2.2"/>
         <circle cx="-7" cy="-10" r="6" fill="#46A06B" stroke="#232733" stroke-width="2"/>
@@ -489,24 +511,16 @@ export function renderRound(container, round, callbacks) {
         <circle cx="7" cy="-10" r="2.5" fill="#232733"/>
         <path d="M -6 3 Q 0 8 6 3" fill="none" stroke="#232733" stroke-width="2" stroke-linecap="round"/>
       </g>
-    `;
+    </svg>
+  `;
 
-    return `
-      <svg class="nl-svg" viewBox="0 0 600 120" role="slider" tabindex="0"
-           aria-label="Number line from ${round.min} to ${round.max}"
-           aria-valuemin="${round.min}" aria-valuemax="${round.max}" aria-valuenow="${currentVal}">
-        <line x1="${trackLeft}" y1="${lineY}" x2="${trackRight}" y2="${lineY}" stroke="#232733" stroke-width="4" stroke-linecap="round"/>
-        ${ticks.join('')}
-        ${startMarker}
-        ${hopArcs}
-        ${targetFlag}
-        ${frog}
-      </svg>
-    `;
-  }
+  const svgEl = trackCard.querySelector('svg');
+  const decorLayer = trackCard.querySelector('#nl-decor-layer');
+  const frogEl = trackCard.querySelector('#nl-frog');
 
-  function updateDisplay(reveal = false) {
-    trackCard.innerHTML = renderSvg(reveal);
+  function updateFrogPositionOnly() {
+    frogEl.setAttribute('transform', `translate(${valToX(currentVal)}, ${lineY - 22})`);
+    svgEl.setAttribute('aria-valuenow', String(currentVal));
     if (round.showAllTicks) {
       readout.textContent = `Frog is on: ${formatVal(currentVal, round.displayMode)}`;
     } else if (activePartitions > 0) {
@@ -514,51 +528,61 @@ export function renderRound(container, round, callbacks) {
     } else {
       readout.textContent = 'Drag or tap anywhere on the line to place the frog';
     }
-    bindPointer();
+  }
+
+  function updateDisplay(reveal = false) {
+    decorLayer.innerHTML = buildTicksAndRevealMarkup(reveal);
+    updateFrogPositionOnly();
   }
 
   let isDragging = false;
-  function setFromClientX(clientX, svgEl) {
+  function setFromClientX(clientX) {
     const rect = svgEl.getBoundingClientRect();
     const svgX = ((clientX - rect.left) / rect.width) * 600;
     currentVal = xToVal(svgX);
-    updateDisplay(false);
+    updateFrogPositionOnly();
   }
 
-  function bindPointer() {
-    const svgEl = trackCard.querySelector('svg');
-    if (!svgEl || solved) return;
-    svgEl.addEventListener('pointerdown', (e) => {
-      if (solved) return;
-      isDragging = true;
+  svgEl.addEventListener('pointerdown', (e) => {
+    if (solved) return;
+    isDragging = true;
+    try {
       svgEl.setPointerCapture(e.pointerId);
-      setFromClientX(e.clientX, svgEl);
-      callbacks.playClick();
-    });
-    svgEl.addEventListener('pointermove', (e) => {
-      if (!isDragging || solved) return;
-      setFromClientX(e.clientX, svgEl);
-    });
-    svgEl.addEventListener('pointerup', () => {
-      isDragging = false;
-    });
-    svgEl.addEventListener('keydown', (e) => {
-      if (solved) return;
-      const delta = round.showAllTicks ? 1 : (round.max - round.min) / 20;
-      if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        currentVal = Math.min(round.max, currentVal + delta);
-        updateDisplay(false);
-      } else if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        currentVal = Math.max(round.min, currentVal - delta);
-        updateDisplay(false);
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        checkBtn.click();
-      }
-    });
-  }
+    } catch {
+      // ignore synthetic pointer events
+    }
+    setFromClientX(e.clientX);
+    callbacks.playClick();
+  });
+  svgEl.addEventListener('pointermove', (e) => {
+    if (!isDragging || solved) return;
+    setFromClientX(e.clientX);
+  });
+  const endDrag = () => {
+    isDragging = false;
+  };
+  svgEl.addEventListener('pointerup', endDrag);
+  svgEl.addEventListener('pointercancel', endDrag);
+  svgEl.addEventListener('keydown', (e) => {
+    if (solved) return;
+    const delta = round.showAllTicks
+      ? 1
+      : activePartitions > 0
+        ? 1 / activePartitions
+        : (round.max - round.min) / 20;
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      currentVal = Math.min(round.max, Number((currentVal + delta).toFixed(4)));
+      updateFrogPositionOnly();
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      currentVal = Math.max(round.min, Number((currentVal - delta).toFixed(4)));
+      updateFrogPositionOnly();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      checkBtn.click();
+    }
+  });
 
   // Optional active self-partitioning bar for Tiers 3–4 fractions, decimals & percents!
   let partBar = null;
@@ -602,7 +626,7 @@ export function renderRound(container, round, callbacks) {
       if (round.speakHops && callbacks.profile && callbacks.profile.readAloud) {
         speakText(String(currentVal), true);
       }
-      updateDisplay(false);
+      updateFrogPositionOnly();
     });
 
     const hopFwdBtn = document.createElement('button');
@@ -617,7 +641,7 @@ export function renderRound(container, round, callbacks) {
       if (round.speakHops && callbacks.profile && callbacks.profile.readAloud) {
         speakText(String(currentVal), true);
       }
-      updateDisplay(false);
+      updateFrogPositionOnly();
     });
 
     actions.appendChild(hopBackBtn);

@@ -24,8 +24,18 @@ import { escapeHtml } from '../games/utils.js';
 export function openParentModal(modalRoot, state, handlers) {
   let activeTab = 'profiles'; // 'profiles' | 'progress' | 'science'
   let editingProfileId = state.activeProfileId;
+  let confirmingDeleteId = null;
+
+  function onEscKey(e) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      close();
+    }
+  }
+  window.addEventListener('keydown', onEscKey);
 
   function close() {
+    window.removeEventListener('keydown', onEscKey);
     modalRoot.innerHTML = '';
     handlers.onStateUpdated();
   }
@@ -34,6 +44,7 @@ export function openParentModal(modalRoot, state, handlers) {
     const selectedProfile =
       state.profiles.find((p) => p.id === editingProfileId) || state.profiles[0];
     editingProfileId = selectedProfile.id;
+    if (confirmingDeleteId !== selectedProfile.id) confirmingDeleteId = null;
 
     let bodyHtml = '';
 
@@ -135,8 +146,13 @@ export function openParentModal(modalRoot, state, handlers) {
 
             ${
               state.profiles.length > 1
-                ? `<div style="display:flex;justify-content:flex-end;">
-                     <button type="button" class="btn btn-ghost" id="btn-delete-kid" style="color:var(--compute-dark);">Remove Profile</button>
+                ? `<div style="display:flex;justify-content:flex-end;gap:8px;align-items:center;">
+                     ${
+                       confirmingDeleteId === selectedProfile.id
+                         ? `<button type="button" class="btn btn-secondary" id="btn-cancel-delete" style="min-height:38px;padding:6px 12px;font-size:0.84rem;">Cancel</button>
+                            <button type="button" class="btn btn-warm" id="btn-delete-kid" style="min-height:38px;padding:6px 14px;font-size:0.84rem;">Confirm Remove ${escapeHtml(selectedProfile.name)}</button>`
+                         : `<button type="button" class="btn btn-ghost" id="btn-delete-kid" style="color:var(--compute-dark);">Remove Profile</button>`
+                     }
                    </div>`
                 : ''
             }
@@ -179,7 +195,7 @@ export function openParentModal(modalRoot, state, handlers) {
                             const nextInfo = getTierInfo(rec.nextTier);
                             return `
                               <div class="tier-nudge-box">
-                                <span><strong>Ready to grow in ${escapeHtml(rec.pillarName)}!</strong> Averaging ${rec.avgAcc}% across ${rec.totalPlays} plays.</span>
+                                <span><strong>Ready to grow in ${escapeHtml(rec.pillarName)}!</strong> Averaging ${rec.avgAcc}% across ${rec.totalPlays} recent plays.</span>
                                 <button type="button"
                                         class="btn btn-primary"
                                         style="min-height:36px;padding:6px 14px;font-size:0.82rem;"
@@ -299,6 +315,7 @@ export function openParentModal(modalRoot, state, handlers) {
     modalRoot.querySelectorAll('[data-ptab]').forEach((btn) => {
       btn.addEventListener('click', () => {
         activeTab = btn.dataset.ptab;
+        confirmingDeleteId = null;
         render();
       });
     });
@@ -307,6 +324,7 @@ export function openParentModal(modalRoot, state, handlers) {
       modalRoot.querySelectorAll('[data-edit-profile]').forEach((btn) => {
         btn.addEventListener('click', () => {
           editingProfileId = btn.dataset.editProfile;
+          confirmingDeleteId = null;
           render();
         });
       });
@@ -314,6 +332,7 @@ export function openParentModal(modalRoot, state, handlers) {
       modalRoot.querySelector('#btn-add-kid').addEventListener('click', () => {
         const created = addProfile(state, { name: `Kid ${state.profiles.length + 1}`, avatar: 'dino', tier: 1 });
         editingProfileId = created.id;
+        confirmingDeleteId = null;
         handlers.onToast(`Added profile "${created.name}"`);
         render();
       });
@@ -368,10 +387,24 @@ export function openParentModal(modalRoot, state, handlers) {
         });
       });
 
+      const cancelDelBtn = modalRoot.querySelector('#btn-cancel-delete');
+      if (cancelDelBtn) {
+        cancelDelBtn.addEventListener('click', () => {
+          confirmingDeleteId = null;
+          render();
+        });
+      }
+
       const delBtn = modalRoot.querySelector('#btn-delete-kid');
       if (delBtn) {
         delBtn.addEventListener('click', () => {
+          if (confirmingDeleteId !== selectedProfile.id) {
+            confirmingDeleteId = selectedProfile.id;
+            render();
+            return;
+          }
           deleteProfile(state, selectedProfile.id);
+          confirmingDeleteId = null;
           editingProfileId = state.profiles[0].id;
           handlers.onToast('Profile removed');
           render();
@@ -388,8 +421,14 @@ export function openParentModal(modalRoot, state, handlers) {
           const nextTier = Number(btn.dataset.promoteTier);
           if (!targetProf.pillarTiers) targetProf.pillarTiers = {};
           targetProf.pillarTiers[pilId] = nextTier;
+          // Reset current-tier mastery stage for promoted pillar while keeping all lifetime stats & stars!
+          if (!targetProf.gameMastery) targetProf.gameMastery = {};
+          for (const g of GAMES.filter((gm) => gm.meta.pillar === pilId)) {
+            targetProf.gameMastery[g.meta.id] = { stage: 1, cleanPlays: 0, recentAccuracies: [] };
+          }
           saveState(state);
-          handlers.onToast(`Promoted ${targetProf.name}'s ${pilId} pillar to ${getTierInfo(nextTier).name}!`);
+          const pilName = (PILLARS.find((x) => x.id === pilId) || { name: pilId }).name;
+          handlers.onToast(`Promoted ${targetProf.name}'s ${pilName} pillar to ${getTierInfo(nextTier).name}!`);
           render();
         });
       });

@@ -2,8 +2,8 @@
  * Home Screen:
  * - Multi-kid profile switcher
  * - Today's 4-pillar Daily Mix Hero Card
- * - Forgiving Monthly Sticker Calendar (no punishing streaks!)
- * - Free Play Lab (all 8 mini-games with pillar filters & effective tier badges)
+ * - Forgiving Monthly Sticker Calendar & Studio Shelf
+ * - Free Play Lab (all 12 mini-games with pillar filters & effective tier badges)
  */
 
 import { getAvatarSvg, PILLAR_ICONS, STAR_SVG, STUDIO_BADGES, STUDIO_SHELF_ITEMS } from '../avatars.js';
@@ -21,6 +21,9 @@ export function renderHome(container, state, activeProfile, activeFilter, handle
   const dailyDoneCount = dailyGames.filter((g) => doneSet.has(g.meta.id)).length;
   const isDailyComplete = dailyDoneCount === dailyGames.length;
   const tierInfo = getTierInfo(activeProfile.tier);
+  const computeTier = getEffectiveTier(activeProfile, 'compute');
+  const hasTimedSprintToday =
+    dailyGames.some((g) => g.meta.timed) && computeTier >= 2 && !activeProfile.calmMode;
   const calData = getMonthCalendarData(activeProfile.completedDates);
   const totalStars = (activeProfile.completedDates || []).length;
   const unlockedSet = new Set(activeProfile.unlockedBadges || []);
@@ -113,9 +116,11 @@ export function renderHome(container, state, activeProfile, activeFilter, handle
                    ${dailyDoneCount === 0 ? "Start Today's Mix →" : `Continue Mix (${dailyDoneCount}/4 done) →`}
                  </button>
                  <span class="daily-note">${
-                   activeProfile.tier === 1 || activeProfile.calmMode
-                     ? 'All untimed · Calm Mode'
-                     : 'Untimed puzzles + 1 calm 60s Fact Sprint'
+                   hasTimedSprintToday
+                     ? '3 untimed puzzles + 1 calm 60s Fact Sprint'
+                     : activeProfile.calmMode || computeTier === 1
+                       ? 'All untimed · Calm Mode'
+                       : 'All 4 puzzles untimed today · Take your time'
                  }</span>`
           }
         </div>

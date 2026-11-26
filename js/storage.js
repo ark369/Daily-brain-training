@@ -105,21 +105,21 @@ function getSafeStorage() {
   return null;
 }
 
-export function loadState() {
-  const storage = getSafeStorage();
-  if (!storage) return defaultState();
-  try {
-    const raw = storage.getItem(STORAGE_KEY);
-    if (!raw) return defaultState();
-    const parsed = JSON.parse(raw);
-    if (!parsed || !Array.isArray(parsed.profiles) || parsed.profiles.length === 0) {
-      return defaultState();
-    }
-    // Hydrate any missing fields safely
-    parsed.profiles = parsed.profiles.map((p) => ({
+function hydrateState(parsed) {
+  if (!parsed || !Array.isArray(parsed.profiles) || parsed.profiles.length === 0) {
+    return null;
+  }
+  const validProfiles = parsed.profiles.filter(
+    (p) => p && typeof p === 'object' && typeof p.id === 'string' && p.id.trim()
+  );
+  if (validProfiles.length === 0) return null;
+
+  const profiles = validProfiles.map((p) => {
+    const tier = Math.max(1, Math.min(4, Number(p.tier) || 1));
+    return {
       pillarTiers: {},
-      readAloud: p.tier === 1,
-      calmMode: p.tier === 1,
+      readAloud: tier === 1,
+      calmMode: tier === 1,
       completedDates: [],
       dailyProgress: {},
       gameStats: {},
@@ -129,12 +129,32 @@ export function loadState() {
       recentPuzzles: {},
       unlockedBadges: [],
       ...p,
-    }));
-    if (!parsed.profiles.some((p) => p.id === parsed.activeProfileId)) {
-      parsed.activeProfileId = parsed.profiles[0].id;
-    }
-    if (typeof parsed.soundEnabled !== 'boolean') parsed.soundEnabled = true;
-    return parsed;
+      name: typeof p.name === 'string' && p.name.trim() ? p.name.trim() : 'Explorer',
+      avatar: typeof p.avatar === 'string' && p.avatar.trim() ? p.avatar : 'fox',
+      tier,
+    };
+  });
+
+  const activeProfileId = profiles.some((p) => p.id === parsed.activeProfileId)
+    ? parsed.activeProfileId
+    : profiles[0].id;
+
+  return {
+    version: Number(parsed.version) || 1,
+    activeProfileId,
+    soundEnabled: typeof parsed.soundEnabled === 'boolean' ? parsed.soundEnabled : true,
+    profiles,
+  };
+}
+
+export function loadState() {
+  const storage = getSafeStorage();
+  if (!storage) return defaultState();
+  try {
+    const raw = storage.getItem(STORAGE_KEY);
+    if (!raw) return defaultState();
+    const parsed = JSON.parse(raw);
+    return hydrateState(parsed) || defaultState();
   } catch {
     return defaultState();
   }
@@ -160,7 +180,7 @@ export function getEffectiveTier(profile, pillarId) {
 }
 
 export function addProfile(state, { name, avatar = 'dino', tier = 1 }) {
-  const id = `kid-${Date.now().toString(36)}`;
+  const id = `kid-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
   const profile = createProfile({
     id,
     name: name.trim() || 'New Explorer',
@@ -359,14 +379,14 @@ export function getTierUpRecommendations(profile, pillars, games) {
     }
 
     const avgAcc = accCount > 0 ? Math.round(accSum / accCount) : 0;
-    if ((totalPlays >= 4 && avgAcc >= 88) || hitStage3) {
+    if ((accCount >= 4 && avgAcc >= 88) || hitStage3) {
       recs.push({
         pillarId: pil.id,
         pillarName: pil.name,
         currentTier: curTier,
         nextTier: curTier + 1,
         avgAcc,
-        totalPlays,
+        totalPlays: accCount || totalPlays,
       });
     }
   }
@@ -587,9 +607,10 @@ export function exportStateJson(state) {
 
 export function importStateJson(jsonStr) {
   const parsed = JSON.parse(jsonStr);
-  if (!parsed || !Array.isArray(parsed.profiles) || parsed.profiles.length === 0) {
+  const hydrated = hydrateState(parsed);
+  if (!hydrated) {
     throw new Error('Invalid backup file format.');
   }
-  saveState(parsed);
-  return loadState();
+  saveState(hydrated);
+  return hydrated;
 }

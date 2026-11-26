@@ -359,7 +359,7 @@ function renderMiniPieceSvg(cells, color, cellPx = 20) {
   return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">${rects}</svg>`;
 }
 
-function renderCubeNetSvg(cells, faceLabels = null) {
+function renderCubeNetSvg(cells, faceLabels = null, highlightLabel = null) {
   const maxR = Math.max(...cells.map(([r]) => r));
   const maxC = Math.max(...cells.map(([, c]) => c));
   const s = 44;
@@ -373,10 +373,11 @@ function renderCubeNetSvg(cells, faceLabels = null) {
       const x = pad + c * s;
       const y = pad + r * s;
       const isStar = faceLabels && faceLabels[idx] === '★';
-      const fill = isStar ? '#FFE499' : '#E3F3F2';
-      const stroke = isStar ? '#C98A10' : '#2E9690';
+      const isWin = highlightLabel && faceLabels && faceLabels[idx] === highlightLabel;
+      const fill = isStar ? '#FFE499' : isWin ? '#D6F3E3' : '#E3F3F2';
+      const stroke = isStar ? '#C98A10' : isWin ? '#2F9E66' : '#2E9690';
       const label = faceLabels
-        ? `<text x="${x + s / 2}" y="${y + s / 2 + 6}" text-anchor="middle" font-family="Fredoka, sans-serif" font-size="${isStar ? 22 : 18}" font-weight="700" fill="${isStar ? '#8C5800' : '#1A4E4B'}">${faceLabels[idx]}</text>`
+        ? `<text x="${x + s / 2}" y="${y + s / 2 + 6}" text-anchor="middle" font-family="Fredoka, sans-serif" font-size="${isStar ? 22 : 18}" font-weight="700" fill="${isStar ? '#8C5800' : isWin ? '#18623D' : '#1A4E4B'}">${faceLabels[idx]}</text>`
         : '';
       return `<rect x="${x + 1.5}" y="${y + 1.5}" width="${s - 3}" height="${s - 3}" rx="5" fill="${fill}" stroke="${stroke}" stroke-width="2.2"/>${label}`;
     })
@@ -418,7 +419,7 @@ export function renderRound(container, round, callbacks) {
   card.className = 'word-stage-card';
   card.innerHTML = `
     <span class="game-pillar-tag visualize">${round.kind === 'cube-net-valid' ? '3D Cube Net Test' : '3D Opposite Face'}</span>
-    ${renderCubeNetSvg(round.cells, round.faceLabels || null)}
+    <div id="net-svg-slot">${renderCubeNetSvg(round.cells, round.faceLabels || null)}</div>
   `;
   wrap.appendChild(card);
 
@@ -466,6 +467,8 @@ export function renderRound(container, round, callbacks) {
         if (letter === round.answer) {
           solved = true;
           btn.classList.add('is-correct');
+          const slot = card.querySelector('#net-svg-slot');
+          if (slot) slot.innerHTML = renderCubeNetSvg(round.cells, round.faceLabels, letter);
           callbacks.onCorrect(!hadMistake, `Awesome 3D folding! Face ${letter} lands right on top, opposite the ★.`);
         } else {
           hadMistake = true;
@@ -527,11 +530,13 @@ function renderTileFitRound(container, round, callbacks) {
 
   function render() {
     const filledCount = piecesState.reduce((sum, p) => sum + (p.placedAt ? p.placedAt.length : 0), 0);
-    const allFilled = filledCount === round.targetCells.length;
 
     wrap.innerHTML = `
       <div class="composer-board" style="grid-template-columns: repeat(${round.boardCols}, var(--comp-cell-size, 54px));" id="comp-board"></div>
       <div class="composer-tray" id="comp-tray"></div>
+      <div style="font-size:0.8rem;color:var(--ink-muted);">
+        ${filledCount > 0 && !solved ? 'Tip: Tap any placed piece on the board to lift it back up.' : 'Pick a piece below, then tap an empty outline square.'}
+      </div>
       <div class="rotate-controls">
         ${
           round.allowRotate
@@ -574,11 +579,13 @@ function renderTileFitRound(container, round, callbacks) {
           if (selectedId === null) return;
           if (tryPlaceAt(r, c)) {
             callbacks.playClick();
-            render();
             const nowFilled = piecesState.reduce((sum, p) => sum + (p.placedAt ? p.placedAt.length : 0), 0);
             if (nowFilled === round.targetCells.length) {
               solved = true;
+              render();
               callbacks.onCorrect(!hadMistake, 'Perfect fit! Every square of the silhouette is completely tiled.');
+            } else {
+              render();
             }
           } else {
             hadMistake = true;
@@ -631,10 +638,6 @@ function renderTileFitRound(container, round, callbacks) {
       selectedId = piecesState[0].id;
       render();
     });
-
-    if (allFilled && !solved) {
-      solved = true;
-    }
   }
 
   render();

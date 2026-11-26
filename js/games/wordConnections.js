@@ -328,7 +328,7 @@ const TIER4_ITEMS = [
 
 function buildSpeakText(item, shuffledOptions) {
   if (item.kind === 'ladder') {
-    return `Arrange the words from ${item.directionLabel.replace('→', 'to')}. The words are: ${item.ordered.join(', ')}.`;
+    return `Arrange the words from ${item.directionLabel.replace('→', 'to')}. The words to order are: ${shuffledOptions.join(', ')}.`;
   }
   if (item.subkind === 'analogy') {
     return `${item.pairA[0]} goes with ${item.pairA[1]}, just like ${item.pairBLeft} goes with what? Choices: ${shuffledOptions.join(', ')}.`;
@@ -366,11 +366,21 @@ export function generateSession(tier = 1, profile = null) {
   return chosen.map((item) => {
     const wordKey = `wc:${item.id}`;
     if (item.kind === 'ladder') {
+      // Guarantee shuffled order is NEVER identical to the winning order!
+      let shuffledWords = shuffle(item.ordered);
+      let guard = 0;
+      while (shuffledWords.every((w, i) => w === item.ordered[i]) && guard < 12) {
+        shuffledWords = shuffle(item.ordered);
+        guard += 1;
+      }
+      if (shuffledWords.every((w, i) => w === item.ordered[i])) {
+        shuffledWords = [item.ordered[2], item.ordered[0], item.ordered[1]];
+      }
       return {
         ...item,
         wordKey,
-        shuffledWords: shuffle(item.ordered),
-        speakPrompt: buildSpeakText(item, []),
+        shuffledWords,
+        speakPrompt: buildSpeakText(item, shuffledWords),
         strategyTip: item.tip,
       };
     }
@@ -532,10 +542,15 @@ function renderLadderRound(container, round, callbacks) {
           ${round.labels
             .map(
               (lbl, idx) => `
-              <div class="shade-slot ${picked[idx] ? 'filled' : ''}">
+              <button type="button"
+                      class="shade-slot ${picked[idx] ? 'filled' : ''}"
+                      data-slot-idx="${idx}"
+                      ${!picked[idx] || solved ? 'disabled' : ''}
+                      title="${picked[idx] ? 'Tap to remove this word' : 'Empty slot'}">
+                ${picked[idx] && !solved ? '<span class="shade-slot-x" aria-hidden="true">×</span>' : ''}
                 <small>${lbl}</small>
                 <span>${picked[idx] || '—'}</span>
-              </div>
+              </button>
               ${idx < round.labels.length - 1 ? '<span class="morpheme-plus">→</span>' : ''}
             `
             )
@@ -548,6 +563,17 @@ function renderLadderRound(container, round, callbacks) {
         <button type="button" class="btn btn-primary" id="btn-ladder-check" ${picked.length < round.ordered.length || solved ? 'disabled' : ''}>Check Ladder!</button>
       </div>
     `;
+
+    wrap.querySelectorAll('[data-slot-idx]').forEach((slotBtn) => {
+      slotBtn.addEventListener('click', () => {
+        if (solved) return;
+        const idx = Number(slotBtn.dataset.slotIdx);
+        if (!picked[idx]) return;
+        callbacks.playClick();
+        picked.splice(idx, 1);
+        render();
+      });
+    });
 
     const wordsBox = wrap.querySelector('#ladder-words');
     round.shuffledWords.forEach((word) => {
@@ -568,6 +594,7 @@ function renderLadderRound(container, round, callbacks) {
     });
 
     wrap.querySelector('#btn-ladder-clear').addEventListener('click', () => {
+      if (solved) return;
       callbacks.playClick();
       picked = [];
       render();

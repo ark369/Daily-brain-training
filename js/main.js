@@ -29,10 +29,17 @@ const brandBtn = document.getElementById('btn-home-brand');
 speechIcon.innerHTML = UI_ICONS.speak;
 parentIcon.innerHTML = UI_ICONS.settings;
 
+let toastTimer = null;
 function showToast(msg) {
-  toastRoot.innerHTML = `<div class="toast">${msg}</div>`;
-  setTimeout(() => {
+  if (toastTimer) clearTimeout(toastTimer);
+  toastRoot.innerHTML = '';
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = String(msg);
+  toastRoot.appendChild(el);
+  toastTimer = setTimeout(() => {
     toastRoot.innerHTML = '';
+    toastTimer = null;
   }, 2400);
 }
 
@@ -54,7 +61,7 @@ function cleanupSession() {
   }
 }
 
-function goHome() {
+function goHome({ preserveScroll = false } = {}) {
   cleanupSession();
   currentView = 'home';
   const profile = getActiveProfile(state);
@@ -65,18 +72,21 @@ function goHome() {
       playClick();
       state.activeProfileId = profileId;
       saveState(state);
-      goHome();
+      goHome({ preserveScroll: true });
     },
     onFilterChange: (filterId) => {
       playClick();
       activeFilter = filterId;
-      goHome();
+      goHome({ preserveScroll: true });
     },
     onStartGame: (gameId, opts) => {
       playClick();
       startGame(gameId, opts);
     },
   });
+  if (!preserveScroll) {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }
 }
 
 function startGame(gameId, opts) {
@@ -90,7 +100,7 @@ function startGame(gameId, opts) {
     onExitHome: () => goHome(),
     onStartGame: (nextId, nextOpts) => startGame(nextId, nextOpts),
   });
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
 }
 
 soundBtn.addEventListener('click', () => {

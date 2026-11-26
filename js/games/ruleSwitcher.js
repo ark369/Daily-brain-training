@@ -176,25 +176,25 @@ function makeSortRound(tier) {
   const pool = buildBooleanRulePool(tier);
   const rules = shuffle(pool).slice(0, 2);
 
+  // Deterministic 27-card deck (3 colors × 3 shapes × 3 counts) guarantees zero null-card edge cases
+  const allCards = [];
+  for (const col of COLORS) {
+    for (const shp of SHAPES) {
+      for (const cnt of [1, 2, 3]) {
+        allCards.push({ color: col.id, shape: shp.id, count: cnt });
+      }
+    }
+  }
+
   const cards = [];
   for (let rIdx = 0; rIdx < 2; rIdx++) {
     const rule = rules[rIdx];
-    const pair = [];
-    for (const wantMatch of [true, false]) {
-      let c = null;
-      for (let tries = 0; tries < 90; tries++) {
-        const cand = {
-          color: pickOne(COLORS).id,
-          shape: pickOne(SHAPES).id,
-          count: randInt(1, 3),
-        };
-        if (rule.test(cand) === wantMatch) {
-          c = cand;
-          break;
-        }
-      }
-      pair.push({ ...c, boolRule: rule, wantMatch });
-    }
+    const matching = allCards.filter((cand) => rule.test(cand));
+    const nonMatching = allCards.filter((cand) => !rule.test(cand));
+    const pair = [
+      { ...pickOne(matching), boolRule: rule, wantMatch: true },
+      { ...pickOne(nonMatching), boolRule: rule, wantMatch: false },
+    ];
     shuffle(pair).forEach((card, i) => {
       cards.push({ ...card, switched: rIdx === 1 && i === 0 });
     });
@@ -870,6 +870,19 @@ export function renderRound(container, round, callbacks) {
 function renderSortRound(container, round, callbacks) {
   let cardIdx = 0;
   let hadMistake = false;
+  let transitioning = false;
+  let cardTimer = null;
+  let unmounted = false;
+
+  if (callbacks.registerCleanup) {
+    callbacks.registerCleanup(() => {
+      unmounted = true;
+      if (cardTimer) {
+        clearTimeout(cardTimer);
+        cardTimer = null;
+      }
+    });
+  }
 
   const wrap = document.createElement('div');
   wrap.style.display = 'flex';
@@ -880,6 +893,8 @@ function renderSortRound(container, round, callbacks) {
   container.appendChild(wrap);
 
   function showCard() {
+    if (unmounted) return;
+    transitioning = false;
     const card = round.cards[cardIdx];
     const isBool = round.kind === 'sort-bool';
 
@@ -890,6 +905,22 @@ function renderSortRound(container, round, callbacks) {
     const ruleText = isBool
       ? `Rule: ${card.boolRule.label}`
       : `Sort by: ${card.activeRule.toUpperCase()}`;
+
+    if (callbacks.profile && callbacks.profile.readAloud && (cardIdx === 0 || card.switched)) {
+      const announce = card.switched ? `New rule! ${ruleText}` : ruleText;
+      if (callbacks.speakRule) {
+        callbacks.speakRule(announce);
+      } else if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        try {
+          window.speechSynthesis.cancel();
+          const u = new SpeechSynthesisUtterance(announce);
+          u.rate = 0.94;
+          window.speechSynthesis.speak(u);
+        } catch {
+          // ignore
+        }
+      }
+    }
 
     const switchTag = card.switched ? '⚡ NEW RULE! ' : '';
 
@@ -926,6 +957,7 @@ function renderSortRound(container, round, callbacks) {
         : bin.label;
 
       btn.addEventListener('click', () => {
+        if (transitioning || unmounted) return;
         const expected = isBool
           ? card.wantMatch
             ? 'yes'
@@ -933,13 +965,18 @@ function renderSortRound(container, round, callbacks) {
           : String(card[card.activeRule]);
 
         if (bin.id === expected) {
+          transitioning = true;
           btn.classList.add('is-correct');
+          binsEl.querySelectorAll('button').forEach((b) => (b.disabled = true));
           cardIdx += 1;
           if (cardIdx >= round.cards.length) {
             callbacks.onCorrect(!hadMistake, 'Awesome flexibility! You switched rules without getting tricked.');
           } else {
             callbacks.playCorrect();
-            setTimeout(showCard, 360);
+            cardTimer = setTimeout(() => {
+              cardTimer = null;
+              showCard();
+            }, 360);
           }
         } else {
           hadMistake = true;
